@@ -1,0 +1,76 @@
+KARGO HIRING RUBRIC — PRODUCT MANAGER & SENIOR PRODUCT MANAGER
+Derived from patterns found in the 8 past-hire profiles (not from the job descriptions)
+
+================================================================================
+PRODUCT MANAGER
+================================================================================
+
+Criterion: Unplanned-Problem Ownership
+What a strong candidate looks like: Names one specific incident - a vendor
+changing something without notice, a system breaking, a client relationship
+going sideways - that wasn't part of a planned project, and states that the
+candidate personally drove the response (not "helped" or "was involved in").
+Weight: 30%
+
+Criterion: Closure Discipline
+What a strong candidate looks like: After the immediate problem is handled,
+shows what happened next - monitoring a result for a defined period,
+training someone, closing follow-up items, checking back later. A fix with
+no mention of the aftermath scores low.
+Weight: 20%
+
+Criterion: Work That Outlives the Task
+What a strong candidate looks like: Names something concrete the candidate
+produced (document, tool, process, template, dashboard) that is still in
+use by people other than the candidate - "became the standard," "adopted
+by," "retained permanently." Adoption confined to the candidate's own small
+team scores lower than adoption reaching a different team, client, or
+company.
+Weight: 30%
+
+Criterion: Written Candor About Failure
+What a strong candidate looks like: Contains a named artifact - a
+postmortem, bug report, loss writeup, audit finding - tied to a specific
+failed or lost outcome, written by the candidate, sent to someone who
+wasn't their own manager (a customer, another department, "the team"). A CV
+with only positive metrics and no such artifact scores lowest.
+Weight: 20%
+
+TOTAL: 100%
+
+================================================================================
+SENIOR PRODUCT MANAGER
+================================================================================
+
+Criterion: Unplanned-Problem Ownership
+What a strong candidate looks like: Same test as PM, but the candidate must
+be shown as the only person handling it - no mention of escalating to
+someone more senior - and the stakes must be visible (a client
+relationship, revenue, a live customer-facing outage, a compliance
+deadline). Describing escalation scores lower than describing personal
+resolution.
+Weight: 35%
+
+Criterion: Closure Discipline
+What a strong candidate looks like: Shows responsibility for consequences
+over a longer window - weeks or months, not days - such as monitoring a
+migration's first 30 days, owning a renegotiation that followed a failure,
+or tracking a resolution to a defined end point. A same-day fix with no
+visible aftercare doesn't meet this bar.
+Weight: 25%
+
+Criterion: Work That Outlives the Task
+What a strong candidate looks like: The reuse must reach outside the
+candidate's own company or direct reporting line - a different client, a
+different organization, or a team they don't belong to - not just their
+own immediate team.
+Weight: 25%
+
+Criterion: Written Candor About Failure
+What a strong candidate looks like: The artifact must show the candidate
+naming their own decision or judgment as part of the cause - not just
+describing a system, vendor, or third party that failed on them. A writeup
+that only blames an external failure meets the PM bar but not this one.
+Weight: 15%
+
+TOTAL: 100%
