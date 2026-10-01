@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { AntdRegistry } from "@ant-design/nextjs-registry";
+import AntdProvider from "./AntdProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,7 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="absolute -right-32 top-1/3 h-[28rem] w-[28rem] rounded-full bg-amber-700/20 blur-[120px]" />
           <div className="absolute bottom-[-10rem] left-1/4 h-[30rem] w-[30rem] rounded-full bg-rose-900/20 blur-[130px]" />
         </div>
-        {children}
+        <AntdRegistry>
+          <AntdProvider>{children}</AntdProvider>
+        </AntdRegistry>
       </body>
     </html>
   );

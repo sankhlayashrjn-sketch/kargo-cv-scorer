@@ -1,7 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  App,
+  Button,
+  Drawer,
+  Empty,
+  Form,
+  Input,
+  InputNumber,
+  Popconfirm,
+  Select,
+  Space,
+  Spin,
+  Table,
+  Tabs,
+  Tag,
+  Typography,
+  Upload,
+} from "antd";
+import type { ColumnsType } from "antd/es/table";
+import type { RcFile } from "antd/es/upload";
+import {
+  DeleteOutlined,
+  InboxOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SettingOutlined,
+} from "@ant-design/icons";
 import { ROLE_LABELS, Role } from "@/lib/rubric";
+
+const { Dragger } = Upload;
+const { TextArea } = Input;
+const { Text, Paragraph } = Typography;
 
 interface CandidateListItem {
   id: string;
@@ -45,7 +76,13 @@ interface CandidateDetail {
   };
   scores: ScoreRow[];
   brief: { summary: string; generated_at: string } | null;
-  email: { kind: "invite" | "rejection"; subject: string; body: string; status: "draft" | "sent"; sent_at: string | null } | null;
+  email: {
+    kind: "invite" | "rejection";
+    subject: string;
+    body: string;
+    status: "draft" | "sent";
+    sent_at: string | null;
+  } | null;
 }
 
 async function safeJson(res: Response): Promise<any> {
@@ -58,9 +95,9 @@ async function safeJson(res: Response): Promise<any> {
 }
 
 function scoreColor(score: number) {
-  if (score >= 70) return "text-emerald-400";
-  if (score >= 40) return "text-amber-400";
-  return "text-rose-400";
+  if (score >= 70) return "#34d399";
+  if (score >= 40) return "#fbbf24";
+  return "#fb7185";
 }
 
 const STUCK_AFTER_MS = 3 * 60 * 1000;
@@ -69,29 +106,44 @@ function isStuck(item: { status: string; created_at: string }) {
   return item.status === "processing" && Date.now() - new Date(item.created_at).getTime() > STUCK_AFTER_MS;
 }
 
+function ScoreCell({ value }: { value: number | null }) {
+  if (value == null) return <Text type="secondary">—</Text>;
+  return <Text style={{ color: scoreColor(value), fontWeight: 600 }}>{value.toFixed(1)}</Text>;
+}
+
+function DecisionTag({ item }: { item: CandidateListItem }) {
+  const stuck = isStuck(item);
+  if (item.status === "processing" && stuck) return <Tag color="error">Stuck</Tag>;
+  if (item.status === "processing") return <Tag color="processing">Scoring…</Tag>;
+  if (item.status === "error") return <Tag color="error">Error</Tag>;
+  if (item.email_kind === "invite") return <Tag color="green">Invite</Tag>;
+  if (item.email_kind === "rejection") return <Tag>Reject</Tag>;
+  return <Text type="secondary">—</Text>;
+}
+
 export default function Home() {
+  const { message } = App.useApp();
+
+  const [candidates, setCandidates] = useState<CandidateListItem[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
+
+  const [addOpen, setAddOpen] = useState(false);
   const [role, setRole] = useState<Role>("pm");
   const [cvText, setCvText] = useState("");
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [candidates, setCandidates] = useState<CandidateListItem[]>([]);
-  const [loadingList, setLoadingList] = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [detailCache, setDetailCache] = useState<Record<string, CandidateDetail>>({});
-  const [detailLoading, setDetailLoading] = useState<string | null>(null);
-  const [sendingId, setSendingId] = useState<string | null>(null);
-  const [sendError, setSendError] = useState<Record<string, string>>({});
-  const [retryingId, setRetryingId] = useState<string | null>(null);
-  const [retryError, setRetryError] = useState<Record<string, string>>({});
-  const [removingId, setRemovingId] = useState<string | null>(null);
-  const [removeError, setRemoveError] = useState<Record<string, string>>({});
-  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
-
-  const [thresholds, setThresholds] = useState({ invite_threshold_pm: "70", invite_threshold_senior_pm: "70" });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [thresholds, setThresholds] = useState({ invite_threshold_pm: 70, invite_threshold_senior_pm: 70 });
   const [savingThresholds, setSavingThresholds] = useState(false);
+
+  const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [detailCache, setDetailCache] = useState<Record<string, CandidateDetail>>({});
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadCandidates(opts?: { silent?: boolean }) {
     if (!opts?.silent) setLoadingList(true);
@@ -109,8 +161,8 @@ export default function Home() {
     const data = await safeJson(res);
     if (res.ok) {
       setThresholds({
-        invite_threshold_pm: data.invite_threshold_pm ?? "70",
-        invite_threshold_senior_pm: data.invite_threshold_senior_pm ?? "70",
+        invite_threshold_pm: Number(data.invite_threshold_pm ?? 70),
+        invite_threshold_senior_pm: Number(data.invite_threshold_senior_pm ?? 70),
       });
     }
   }
@@ -120,24 +172,23 @@ export default function Home() {
     void loadSettings();
   }, []);
 
-  // While any candidate is still being scored in the background (see
-  // app/api/candidates/route.ts's use of `after()`), poll quietly until it's
-  // done instead of leaving the row stuck on "Scoring…".
   useEffect(() => {
     const hasProcessing = candidates.some((c) => c.status === "processing");
     if (!hasProcessing) return;
-    const interval = setInterval(() => {
-      void loadCandidates({ silent: true });
-    }, 3000);
+    const interval = setInterval(() => void loadCandidates({ silent: true }), 3000);
     return () => clearInterval(interval);
   }, [candidates]);
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSubmitError(null);
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  const stats = useMemo(() => {
+    const total = candidates.length;
+    const invited = candidates.filter((c) => c.email_kind === "invite").length;
+    const rejected = candidates.filter((c) => c.email_kind === "rejection").length;
+    const pending = candidates.filter((c) => c.status === "processing" || c.status === "error").length;
+    return { total, invited, rejected, pending };
+  }, [candidates]);
 
+  async function processCvFile(file: File) {
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
     if (isPdf) {
       setUploading(true);
       try {
@@ -146,12 +197,12 @@ export default function Home() {
         const res = await fetch("/api/extract-pdf", { method: "POST", body: formData });
         const data = await safeJson(res);
         if (!res.ok) {
-          setSubmitError(data.error || "Could not read that PDF.");
+          message.error(data.error || "Could not read that PDF.");
           return;
         }
         setCvText(data.text);
       } catch (err) {
-        setSubmitError(err instanceof Error ? err.message : "Could not read that PDF.");
+        message.error(err instanceof Error ? err.message : "Could not read that PDF.");
       } finally {
         setUploading(false);
       }
@@ -159,15 +210,12 @@ export default function Home() {
       const text = await file.text();
       setCvText(text);
     }
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitError(null);
+  async function handleAddCandidate() {
     const trimmed = cvText.trim();
     if (!trimmed) {
-      setSubmitError("Paste or upload CV text first.");
+      message.warning("Paste or upload CV text first.");
       return;
     }
     setSubmitting(true);
@@ -179,522 +227,448 @@ export default function Home() {
       });
       const data = await safeJson(res);
       if (!res.ok) {
-        setSubmitError(data.error || "Could not process this candidate.");
+        message.error(data.error || "Could not process this candidate.");
         return;
       }
+      message.success(`${data.name || "Candidate"} added — scoring in the background.`);
       setCvText("");
+      setAddOpen(false);
       await loadCandidates();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Network error");
+      message.error(err instanceof Error ? err.message : "Network error");
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function toggleExpand(id: string) {
-    if (expandedId === id) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(id);
+  async function openDrawer(id: string) {
+    setDrawerId(id);
     if (!detailCache[id]) {
-      setDetailLoading(id);
+      setDetailLoading(true);
       try {
         const res = await fetch(`/api/candidates/${id}`);
         const data = await safeJson(res);
         if (res.ok) setDetailCache((prev) => ({ ...prev, [id]: data }));
+        else message.error(data.error || "Could not load this candidate.");
       } finally {
-        setDetailLoading(null);
+        setDetailLoading(false);
       }
     }
   }
 
-  async function handleSend(id: string) {
-    setSendingId(id);
-    setSendError((prev) => ({ ...prev, [id]: "" }));
+  async function handleConfirmSend(id: string) {
+    setSending(true);
     try {
       const res = await fetch(`/api/candidates/${id}/send`, { method: "POST" });
       const data = await safeJson(res);
       if (!res.ok) {
-        setSendError((prev) => ({ ...prev, [id]: data.error || "Could not send email." }));
+        message.error(data.error || "Could not send email.");
         return;
       }
+      message.success("Email sent.");
       setDetailCache((prev) => {
         const existing = prev[id];
         if (!existing || !existing.email) return prev;
-        return { ...prev, [id]: { ...existing, email: { ...existing.email, status: "sent", sent_at: new Date().toISOString() } } };
+        return {
+          ...prev,
+          [id]: { ...existing, email: { ...existing.email, status: "sent", sent_at: new Date().toISOString() } },
+        };
       });
       await loadCandidates();
     } catch (err) {
-      setSendError((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : "Network error" }));
+      message.error(err instanceof Error ? err.message : "Network error");
     } finally {
-      setSendingId(null);
-    }
-  }
-
-  async function handleRemove(id: string) {
-    setConfirmRemoveId(null);
-    setRemovingId(id);
-    setRemoveError((prev) => ({ ...prev, [id]: "" }));
-    try {
-      const res = await fetch(`/api/candidates/${id}`, { method: "DELETE" });
-      const data = await safeJson(res);
-      if (!res.ok) {
-        setRemoveError((prev) => ({ ...prev, [id]: data.error || "Could not remove this candidate." }));
-        return;
-      }
-      if (expandedId === id) setExpandedId(null);
-      setDetailCache((prev) => {
-        const { [id]: _removed, ...rest } = prev;
-        return rest;
-      });
-      await loadCandidates();
-    } catch (err) {
-      setRemoveError((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : "Network error" }));
-    } finally {
-      setRemovingId(null);
+      setSending(false);
     }
   }
 
   async function handleRetry(id: string) {
     setRetryingId(id);
-    setRetryError((prev) => ({ ...prev, [id]: "" }));
     try {
       const res = await fetch(`/api/candidates/${id}/retry`, { method: "POST" });
       const data = await safeJson(res);
       if (!res.ok) {
-        setRetryError((prev) => ({ ...prev, [id]: data.error || "Could not retry this candidate." }));
+        message.error(data.error || "Could not retry this candidate.");
         return;
       }
+      message.info("Retrying…");
       setDetailCache((prev) => {
         const { [id]: _removed, ...rest } = prev;
         return rest;
       });
       await loadCandidates();
     } catch (err) {
-      setRetryError((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : "Network error" }));
+      message.error(err instanceof Error ? err.message : "Network error");
     } finally {
       setRetryingId(null);
+    }
+  }
+
+  async function handleRemove(id: string) {
+    try {
+      const res = await fetch(`/api/candidates/${id}`, { method: "DELETE" });
+      const data = await safeJson(res);
+      if (!res.ok) {
+        message.error(data.error || "Could not remove this candidate.");
+        return;
+      }
+      message.success("Candidate removed.");
+      if (drawerId === id) setDrawerId(null);
+      setDetailCache((prev) => {
+        const { [id]: _removed, ...rest } = prev;
+        return rest;
+      });
+      await loadCandidates();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "Network error");
     }
   }
 
   async function saveThresholds() {
     setSavingThresholds(true);
     try {
-      await fetch("/api/settings", {
+      const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(thresholds),
       });
+      const data = await safeJson(res);
+      if (!res.ok) {
+        message.error(data.error || "Could not save settings.");
+        return;
+      }
+      message.success("Thresholds saved.");
       await loadCandidates();
     } finally {
       setSavingThresholds(false);
     }
   }
 
+  const columns: ColumnsType<CandidateListItem> = [
+    {
+      title: "Name",
+      dataIndex: "name",
+      render: (name: string | null, item) => (
+        <a onClick={() => item.status === "ready" && openDrawer(item.id)} style={{ fontWeight: 600 }}>
+          {name || "Unnamed candidate"}
+        </a>
+      ),
+    },
+    {
+      title: "Applied for",
+      dataIndex: "role_applied",
+      filters: [
+        { text: "Product Manager", value: "pm" },
+        { text: "Senior Product Manager", value: "senior_pm" },
+      ],
+      onFilter: (value, item) => item.role_applied === value,
+      render: (role: Role) => ROLE_LABELS[role],
+    },
+    {
+      title: "PM score",
+      dataIndex: "total_score_pm",
+      sorter: (a, b) => (a.total_score_pm ?? -1) - (b.total_score_pm ?? -1),
+      render: (v: number | null) => <ScoreCell value={v} />,
+    },
+    {
+      title: "SPM score",
+      dataIndex: "total_score_spm",
+      sorter: (a, b) => (a.total_score_spm ?? -1) - (b.total_score_spm ?? -1),
+      render: (v: number | null) => <ScoreCell value={v} />,
+    },
+    {
+      title: "Decision",
+      key: "decision",
+      filters: [
+        { text: "Invite", value: "invite" },
+        { text: "Reject", value: "rejection" },
+      ],
+      onFilter: (value, item) => item.email_kind === value,
+      render: (_, item) => <DecisionTag item={item} />,
+    },
+    {
+      title: "Email",
+      dataIndex: "email_status",
+      render: (status: string | null) =>
+        status === "sent" ? (
+          <Tag color="green">Sent</Tag>
+        ) : status === "draft" ? (
+          <Tag>Draft</Tag>
+        ) : (
+          <Text type="secondary">—</Text>
+        ),
+    },
+    {
+      title: "",
+      key: "actions",
+      align: "right",
+      render: (_, item) => (
+        <Space>
+          {(item.status === "error" || isStuck(item)) && (
+            <Button
+              size="small"
+              icon={<ReloadOutlined />}
+              loading={retryingId === item.id}
+              onClick={() => handleRetry(item.id)}
+            >
+              Retry
+            </Button>
+          )}
+          <Popconfirm
+            title="Remove this candidate?"
+            description="This permanently deletes their record, scores, brief, and email draft."
+            okText="Remove"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => handleRemove(item.id)}
+          >
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  const sortedForDefault = [...candidates].sort(
+    (a, b) => (b.applied_score ?? -1) - (a.applied_score ?? -1)
+  );
+
+  const drawerDetail = drawerId ? detailCache[drawerId] : undefined;
+  const drawerItem = drawerId ? candidates.find((c) => c.id === drawerId) : undefined;
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-white">Kargo Hiring Dashboard</h1>
-        <p className="mt-1 text-sm text-stone-400">
-          Every CV is scored against both the PM and Senior PM rubric, and gets a drafted interview invite or
-          rejection email. Nothing is sent until you click Confirm.
-        </p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-white">Kargo Hiring Dashboard</h1>
+          <p className="mt-1 max-w-2xl text-sm text-stone-400">
+            Every CV is scored against both the PM and Senior PM rubric and gets a drafted interview invite or
+            rejection email. Nothing is sent until you click Confirm.
+          </p>
+        </div>
+        <Space>
+          <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)}>
+            Thresholds
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
+            Add candidate
+          </Button>
+        </Space>
       </header>
 
-      <section className="mb-10 rounded-xl border border-white/10 bg-surface-raised/40 p-5 shadow-xl shadow-black/20 backdrop-blur-xl">
-        <h2 className="mb-4 text-base font-medium text-white">Add a candidate</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-400">
-              Role applied for
-            </label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as Role)}
-              className="w-full max-w-xs rounded-md border border-white/10 bg-surface-overlay/60 px-3 py-2 backdrop-blur-sm text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
-            >
-              <option value="pm">Product Manager</option>
-              <option value="senior_pm">Senior Product Manager</option>
-            </select>
-          </div>
-
-          <div>
-            <div className="mb-1 flex items-center justify-between">
-              <label className="block text-xs font-medium uppercase tracking-wide text-stone-400">CV text</label>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="text-xs font-medium text-accent-400 hover:text-accent-300 disabled:cursor-not-allowed disabled:text-stone-500"
-              >
-                {uploading ? "Reading PDF…" : "Upload .txt or .pdf file"}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".txt,text/plain,.pdf,application/pdf"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          { label: "Candidates", value: stats.total },
+          { label: "Invited", value: stats.invited, color: "#34d399" },
+          { label: "Rejected", value: stats.rejected, color: "#a8a29e" },
+          { label: "Needs attention", value: stats.pending, color: stats.pending ? "#fb7185" : undefined },
+        ].map((s) => (
+          <div
+            key={s.label}
+            className="rounded-xl border border-white/10 bg-surface-raised/40 p-4 text-center shadow-lg shadow-black/20 backdrop-blur-xl"
+          >
+            <div className="text-2xl font-semibold" style={{ color: s.color }}>
+              {s.value}
             </div>
-            <textarea
+            <div className="text-xs uppercase tracking-wide text-stone-400">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-white/10 shadow-xl shadow-black/20">
+        <Table<CandidateListItem>
+          rowKey="id"
+          columns={columns}
+          dataSource={sortedForDefault}
+          loading={loadingList}
+          pagination={sortedForDefault.length > 10 ? { pageSize: 10 } : false}
+          locale={{ emptyText: <Empty description="No candidates yet" /> }}
+        />
+      </div>
+
+      {/* Add candidate */}
+      <Drawer
+        title="Add a candidate"
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        size={480}
+        extra={
+          <Button type="primary" onClick={handleAddCandidate} loading={submitting}>
+            Score candidate
+          </Button>
+        }
+      >
+        <Form layout="vertical">
+          <Form.Item label="Role applied for">
+            <Select<Role>
+              value={role}
+              onChange={setRole}
+              options={[
+                { value: "pm", label: "Product Manager" },
+                { value: "senior_pm", label: "Senior Product Manager" },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item label="CV">
+            <Dragger
+              multiple={false}
+              showUploadList={false}
+              accept=".txt,text/plain,.pdf,application/pdf"
+              beforeUpload={(file: RcFile) => {
+                void processCvFile(file);
+                return false;
+              }}
+              disabled={uploading}
+            >
+              <p className="ant-upload-drag-icon">
+                <InboxOutlined />
+              </p>
+              <p>{uploading ? "Reading PDF…" : "Click or drag a .txt or .pdf file here"}</p>
+            </Dragger>
+          </Form.Item>
+          <Form.Item label="Or paste CV text">
+            <TextArea
               value={cvText}
               onChange={(e) => setCvText(e.target.value)}
+              rows={12}
               placeholder="Paste the candidate's CV as plain text..."
-              rows={8}
-              className="w-full rounded-md border border-white/10 bg-surface-overlay/60 px-3 py-2 backdrop-blur-sm font-mono text-sm text-stone-100 placeholder:text-stone-500 focus:border-accent-500 focus:outline-none"
             />
-          </div>
+          </Form.Item>
+        </Form>
+      </Drawer>
 
-          {submitError && <p className="text-sm text-rose-400">{submitError}</p>}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-accent-800"
-          >
-            {submitting ? "Scoring against both rubrics…" : "Add candidate"}
-          </button>
-        </form>
-      </section>
-
-      <section className="mb-10 rounded-xl border border-white/10 bg-surface-raised/40 p-5 shadow-xl shadow-black/20 backdrop-blur-xl">
-        <h2 className="mb-4 text-base font-medium text-white">Invite thresholds</h2>
-        <div className="flex flex-wrap items-end gap-4">
-          <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-400">
-              PM (score out of 100)
-            </label>
-            <input
-              type="number"
+      {/* Settings */}
+      <Drawer title="Invite thresholds" open={settingsOpen} onClose={() => setSettingsOpen(false)} size={360}>
+        <Paragraph type="secondary" style={{ fontSize: 13 }}>
+          A candidate's total score — against the rubric for the role they applied for — at or above this number
+          gets an interview invite draft; below it gets a rejection draft. Applies to new candidates going forward.
+        </Paragraph>
+        <Form layout="vertical">
+          <Form.Item label="Product Manager (score out of 100)">
+            <InputNumber
+              style={{ width: "100%" }}
               value={thresholds.invite_threshold_pm}
-              onChange={(e) => setThresholds((t) => ({ ...t, invite_threshold_pm: e.target.value }))}
-              className="w-28 rounded-md border border-white/10 bg-surface-overlay/60 px-3 py-2 backdrop-blur-sm text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
+              onChange={(v) => setThresholds((t) => ({ ...t, invite_threshold_pm: Number(v ?? 70) }))}
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-400">
-              Senior PM (score out of 100)
-            </label>
-            <input
-              type="number"
+          </Form.Item>
+          <Form.Item label="Senior Product Manager (score out of 100)">
+            <InputNumber
+              style={{ width: "100%" }}
               value={thresholds.invite_threshold_senior_pm}
-              onChange={(e) => setThresholds((t) => ({ ...t, invite_threshold_senior_pm: e.target.value }))}
-              className="w-28 rounded-md border border-white/10 bg-surface-overlay/60 px-3 py-2 backdrop-blur-sm text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
+              onChange={(v) => setThresholds((t) => ({ ...t, invite_threshold_senior_pm: Number(v ?? 70) }))}
             />
+          </Form.Item>
+          <Button type="primary" onClick={saveThresholds} loading={savingThresholds} block>
+            Save
+          </Button>
+        </Form>
+      </Drawer>
+
+      {/* Candidate detail */}
+      <Drawer
+        title={drawerItem?.name || "Candidate"}
+        open={!!drawerId}
+        onClose={() => setDrawerId(null)}
+        size={640}
+      >
+        {detailLoading || !drawerDetail ? (
+          <div className="flex justify-center py-16">
+            <Spin />
           </div>
-          <button
-            onClick={saveThresholds}
-            disabled={savingThresholds}
-            className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-stone-200 hover:bg-surface-overlay disabled:cursor-not-allowed disabled:text-stone-500"
-          >
-            {savingThresholds ? "Saving…" : "Save"}
-          </button>
-        </div>
-        <p className="mt-2 text-xs text-stone-500">
-          Applies to new candidates going forward. A candidate's total score (against the rubric for the role they
-          applied for) at or above this number gets an interview invite draft; below it gets a rejection draft.
-        </p>
-      </section>
-
-      <section>
-        <h2 className="mb-4 text-base font-medium text-white">
-          Candidates {candidates.length > 0 && <span className="text-stone-500">({candidates.length})</span>}
-        </h2>
-
-        {loadingList ? (
-          <p className="text-sm text-stone-500">Loading…</p>
-        ) : candidates.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-white/15 bg-white/5 px-4 py-8 backdrop-blur-sm text-center text-sm text-stone-500">
-            No candidates yet.
-          </p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-surface-raised/30 shadow-xl shadow-black/20 backdrop-blur-xl">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-surface-overlay/40 text-xs uppercase tracking-wide text-stone-400 backdrop-blur-sm">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Rank</th>
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Applied for</th>
-                  <th className="px-4 py-3 font-medium">PM score</th>
-                  <th className="px-4 py-3 font-medium">SPM score</th>
-                  <th className="px-4 py-3 font-medium">Decision</th>
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {candidates.map((c, idx) => (
-                  <CandidateRow
-                    key={c.id}
-                    rank={idx + 1}
-                    item={c}
-                    expanded={expandedId === c.id}
-                    detail={detailCache[c.id]}
-                    detailLoading={detailLoading === c.id}
-                    sending={sendingId === c.id}
-                    sendError={sendError[c.id]}
-                    retrying={retryingId === c.id}
-                    retryError={retryError[c.id]}
-                    removing={removingId === c.id}
-                    removeError={removeError[c.id]}
-                    confirmingRemove={confirmRemoveId === c.id}
-                    onToggle={() => toggleExpand(c.id)}
-                    onSend={() => handleSend(c.id)}
-                    onRetry={() => handleRetry(c.id)}
-                    onRequestRemove={() => setConfirmRemoveId(c.id)}
-                    onCancelRemove={() => setConfirmRemoveId(null)}
-                    onConfirmRemove={() => handleRemove(c.id)}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CandidateDetailView detail={drawerDetail} sending={sending} onConfirmSend={() => drawerId && handleConfirmSend(drawerId)} />
         )}
-      </section>
+      </Drawer>
     </main>
   );
 }
 
-function CandidateRow({
-  rank,
-  item,
-  expanded,
+function CandidateDetailView({
   detail,
-  detailLoading,
   sending,
-  sendError,
-  retrying,
-  retryError,
-  removing,
-  removeError,
-  confirmingRemove,
-  onToggle,
-  onSend,
-  onRetry,
-  onRequestRemove,
-  onCancelRemove,
-  onConfirmRemove,
+  onConfirmSend,
 }: {
-  rank: number;
-  item: CandidateListItem;
-  expanded: boolean;
-  detail?: CandidateDetail;
-  detailLoading: boolean;
+  detail: CandidateDetail;
   sending: boolean;
-  sendError?: string;
-  retrying: boolean;
-  retryError?: string;
-  removing: boolean;
-  removeError?: string;
-  confirmingRemove: boolean;
-  onToggle: () => void;
-  onSend: () => void;
-  onRetry: () => void;
-  onRequestRemove: () => void;
-  onCancelRemove: () => void;
-  onConfirmRemove: () => void;
+  onConfirmSend: () => void;
 }) {
-  const stuck = isStuck(item);
-  return (
-    <>
-      <tr className="border-t border-white/10">
-        <td className="px-4 py-3 text-stone-400">{rank}</td>
-        <td className="px-4 py-3 font-medium text-stone-100">{item.name || "Unnamed candidate"}</td>
-        <td className="px-4 py-3 text-stone-400">{ROLE_LABELS[item.role_applied]}</td>
-        <td className="px-4 py-3">
-          {item.total_score_pm != null ? (
-            <span className={scoreColor(item.total_score_pm)}>{item.total_score_pm.toFixed(1)}</span>
-          ) : (
-            "—"
-          )}
-        </td>
-        <td className="px-4 py-3">
-          {item.total_score_spm != null ? (
-            <span className={scoreColor(item.total_score_spm)}>{item.total_score_spm.toFixed(1)}</span>
-          ) : (
-            "—"
-          )}
-        </td>
-        <td className="px-4 py-3">
-          {item.status === "processing" && stuck ? (
-            <span className="text-rose-400">Stuck</span>
-          ) : item.status === "processing" ? (
-            <span className="inline-flex items-center gap-2 text-stone-400">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-accent-500" />
-              Scoring…
-            </span>
-          ) : item.status === "error" ? (
-            <span className="text-rose-400">Error</span>
-          ) : item.email_kind === "invite" ? (
-            <span className="rounded-full bg-emerald-950 px-2 py-0.5 text-xs font-medium text-emerald-400">
-              Invite
-            </span>
-          ) : item.email_kind === "rejection" ? (
-            <span className="rounded-full bg-stone-800 px-2 py-0.5 text-xs font-medium text-stone-400">Reject</span>
-          ) : (
-            "—"
-          )}
-        </td>
-        <td className="px-4 py-3 text-stone-400">
-          {item.email_status === "sent" ? (
-            <span className="text-emerald-400">Sent</span>
-          ) : item.email_status === "draft" ? (
-            "Draft"
-          ) : (
-            "—"
-          )}
-        </td>
-        <td className="px-4 py-3 text-right">
-          <div className="flex justify-end gap-3">
-            {item.status === "ready" && (
-              <button onClick={onToggle} className="text-xs font-medium text-accent-400 hover:text-accent-300">
-                {expanded ? "Hide" : "View"}
-              </button>
-            )}
-            {(item.status === "error" || stuck) && (
-              <button
-                onClick={onRetry}
-                disabled={retrying}
-                className="text-xs font-medium text-accent-400 hover:text-accent-300 disabled:cursor-not-allowed disabled:text-stone-500"
-              >
-                {retrying ? "Retrying…" : "Retry"}
-              </button>
-            )}
-            {confirmingRemove ? (
-              <span className="inline-flex items-center gap-2 text-xs">
-                <span className="text-stone-400">Remove?</span>
-                <button
-                  onClick={onConfirmRemove}
-                  disabled={removing}
-                  className="font-medium text-rose-400 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-stone-500"
-                >
-                  {removing ? "Removing…" : "Yes"}
-                </button>
-                <button onClick={onCancelRemove} disabled={removing} className="font-medium text-stone-400 hover:text-stone-200">
-                  No
-                </button>
-              </span>
+  const nameOrThere = detail.candidate.name || "there";
+
+  const decisionPane = (
+    <div className="space-y-4">
+      {detail.brief && (
+        <div>
+          <Text strong>Interview brief</Text>
+          <Paragraph style={{ marginTop: 8 }}>{detail.brief.summary}</Paragraph>
+        </div>
+      )}
+
+      {detail.email && (
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <Text strong>
+              Draft {detail.email.kind === "invite" ? "interview invite" : "rejection"} email
+            </Text>
+            {detail.email.status === "sent" ? (
+              <Tag color="green">
+                Sent {detail.email.sent_at ? new Date(detail.email.sent_at).toLocaleString() : ""}
+              </Tag>
             ) : (
-              <button onClick={onRequestRemove} className="text-xs font-medium text-stone-500 hover:text-rose-400">
-                Remove
-              </button>
+              <Button type="primary" size="small" loading={sending} onClick={onConfirmSend}>
+                Confirm
+              </Button>
             )}
           </div>
-        </td>
-      </tr>
-      {item.status === "error" && (
-        <tr className="border-t border-white/10 bg-rose-950/20">
-          <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
-            {item.error_message}
-          </td>
-        </tr>
+          <div className="rounded-md border border-white/10 bg-surface-overlay/60 px-3 py-2 text-sm">
+            <p className="mb-2 font-medium text-stone-200">
+              {detail.email.subject.split("{{NAME}}").join(nameOrThere)}
+            </p>
+            <p className="whitespace-pre-wrap text-stone-300">
+              {detail.email.body.split("{{NAME}}").join(nameOrThere)}
+            </p>
+          </div>
+          <p className="mt-2 text-xs text-stone-500">To: {detail.candidate.email || "no email on file"}</p>
+        </div>
       )}
-      {removeError && (
-        <tr className="border-t border-white/10 bg-rose-950/20">
-          <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
-            {removeError}
-          </td>
-        </tr>
-      )}
-      {stuck && (
-        <tr className="border-t border-white/10 bg-rose-950/20">
-          <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
-            This candidate has been processing for over 3 minutes and likely failed silently (e.g. a function
-            timeout). Retry re-runs scoring from the stored CV — no need to re-upload.
-          </td>
-        </tr>
-      )}
-      {retryError && (
-        <tr className="border-t border-white/10 bg-rose-950/20">
-          <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
-            {retryError}
-          </td>
-        </tr>
-      )}
-      {expanded && (
-        <tr className="border-t border-white/10">
-          <td colSpan={8} className="bg-surface-overlay/20 px-4 py-4 backdrop-blur-md">
-            {detailLoading || !detail ? (
-              <p className="text-sm text-stone-500">Loading…</p>
-            ) : (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <RubricBreakdown title="Product Manager rubric" rows={detail.scores.filter((s) => s.rubric_role === "pm")} />
-                  <RubricBreakdown
-                    title="Senior Product Manager rubric"
-                    rows={detail.scores.filter((s) => s.rubric_role === "senior_pm")}
-                  />
-                </div>
+    </div>
+  );
 
-                {detail.brief && (
-                  <div className="rounded-lg border border-white/10 bg-surface-raised/40 p-4 shadow-lg shadow-black/20 backdrop-blur-xl">
-                    <h3 className="mb-2 font-medium text-stone-100">Interview brief</h3>
-                    <p className="text-sm text-stone-300">{detail.brief.summary}</p>
-                  </div>
-                )}
-
-                {detail.email && (
-                  <div className="rounded-lg border border-white/10 bg-surface-raised/40 p-4 shadow-lg shadow-black/20 backdrop-blur-xl">
-                    <div className="mb-2 flex items-center justify-between">
-                      <h3 className="font-medium text-stone-100">
-                        Draft {detail.email.kind === "invite" ? "interview invite" : "rejection"} email
-                      </h3>
-                      {detail.email.status === "sent" ? (
-                        <span className="text-xs font-medium text-emerald-400">
-                          Sent {detail.email.sent_at ? new Date(detail.email.sent_at).toLocaleString() : ""}
-                        </span>
-                      ) : (
-                        <button
-                          onClick={onSend}
-                          disabled={sending}
-                          className="rounded-md bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-accent-800"
-                        >
-                          {sending ? "Sending…" : "Confirm"}
-                        </button>
-                      )}
-                    </div>
-                    {sendError && <p className="mb-2 text-xs text-rose-400">{sendError}</p>}
-                    <div className="rounded-md border border-white/10 bg-surface-overlay/60 px-3 py-2 backdrop-blur-sm text-sm text-stone-300">
-                      <p className="mb-2 font-medium text-stone-200">
-                        {detail.email.subject.split("{{NAME}}").join(detail.candidate.name || "there")}
-                      </p>
-                      <p className="whitespace-pre-wrap">
-                        {detail.email.body.split("{{NAME}}").join(detail.candidate.name || "there")}
-                      </p>
-                    </div>
-                    <p className="mt-2 text-xs text-stone-500">To: {detail.candidate.email || "no email on file"}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </td>
-        </tr>
-      )}
-    </>
+  return (
+    <Tabs
+      defaultActiveKey="decision"
+      items={[
+        { key: "decision", label: "Brief & email", children: decisionPane },
+        {
+          key: "pm",
+          label: "PM rubric",
+          children: <RubricBreakdown rows={detail.scores.filter((s) => s.rubric_role === "pm")} />,
+        },
+        {
+          key: "spm",
+          label: "SPM rubric",
+          children: <RubricBreakdown rows={detail.scores.filter((s) => s.rubric_role === "senior_pm")} />,
+        },
+      ]}
+    />
   );
 }
 
-function RubricBreakdown({ title, rows }: { title: string; rows: ScoreRow[] }) {
+function RubricBreakdown({ rows }: { rows: ScoreRow[] }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-surface-raised/40 p-4 shadow-lg shadow-black/20 backdrop-blur-xl">
-      <h3 className="mb-3 font-medium text-stone-100">{title}</h3>
-      <div className="space-y-3">
-        {rows.map((r) => (
-          <div key={r.criterion_key} className="border-t border-white/10 pt-3 first:border-t-0 first:pt-0">
-            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-              <span className="text-sm font-medium text-stone-200">{r.label}</span>
-              <span className="text-xs text-stone-400">
-                weight {r.weight}% · <span className={scoreColor(r.score)}>{r.score}/100</span> · {r.weighted_contribution} pts
-              </span>
-            </div>
-            <blockquote className="border-l-2 border-white/10 pl-3 text-xs italic text-stone-400">
-              &ldquo;{r.evidence}&rdquo;
-            </blockquote>
+    <div className="space-y-3">
+      {rows.map((r) => (
+        <div key={r.criterion_key} className="border-b border-white/10 pb-3 last:border-b-0">
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+            <Text strong>{r.label}</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              weight {r.weight}% · <span style={{ color: scoreColor(r.score) }}>{r.score}/100</span> ·{" "}
+              {r.weighted_contribution} pts
+            </Text>
           </div>
-        ))}
-      </div>
+          <blockquote className="border-l-2 border-white/10 pl-3 text-xs italic text-stone-400">
+            &ldquo;{r.evidence}&rdquo;
+          </blockquote>
+        </div>
+      ))}
     </div>
   );
 }
