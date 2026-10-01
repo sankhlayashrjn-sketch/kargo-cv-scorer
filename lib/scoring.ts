@@ -1,9 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { CriterionDef, CriterionResult, ROLE_LABELS, Role } from "@/lib/rubric";
-
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+import { generateJson } from "@/lib/generate";
 
 type RawScores = Record<string, { score: number; evidence: string; rationale: string }>;
 
@@ -17,7 +14,7 @@ function buildPrompt(role: Role, cvText: string, criteria: CriterionDef[]) {
 
 Score the CV strictly against each of the following criteria, using ONLY textual evidence found in the CV below. Do not guess generously — if the CV is silent on a criterion, or the evidence is thin/generic, score it low. Reward specificity (named incidents, named artifacts, concrete scope of adoption) over vague claims or metrics with no supporting narrative.
 
-Note: the CV below has had the candidate's name, email, and phone number replaced with placeholder tokens like [CANDIDATE], [EMAIL], [PHONE] for privacy. Score on substance, not the placeholders.
+Note: the CV below has had the candidate's name, email, and phone number removed for privacy. Score on substance.
 
 CRITERIA:
 
@@ -34,45 +31,7 @@ ${cvText}
 """`;
 }
 
-function buildAnthropicTool(criteria: CriterionDef[]) {
-  const properties: Record<string, unknown> = {};
-  for (const c of criteria) {
-    properties[c.key] = {
-      type: "object",
-      properties: {
-        score: {
-          type: "integer",
-          minimum: 0,
-          maximum: 100,
-          description:
-            "0-100 score for this criterion, based strictly on textual evidence in the CV. If the CV is silent on this criterion, score it low, not a middling default.",
-        },
-        evidence: {
-          type: "string",
-          description:
-            'A direct quote (or close paraphrase with line reference) from the CV that justifies the score. If there is no matching evidence in the CV, this must literally state "No matching evidence found in the CV."',
-        },
-        rationale: {
-          type: "string",
-          description:
-            "One to two sentences explaining how the evidence does or does not meet the strong-candidate bar for this criterion.",
-        },
-      },
-      required: ["score", "evidence", "rationale"],
-    };
-  }
-  return {
-    name: "submit_scores",
-    description: "Submit the per-criterion scores, evidence, and rationale for this candidate's CV.",
-    input_schema: {
-      type: "object" as const,
-      properties,
-      required: criteria.map((c) => c.key),
-    },
-  };
-}
-
-function buildGeminiSchema(criteria: CriterionDef[]) {
+function buildSchema(criteria: CriterionDef[]) {
   const properties: Record<string, unknown> = {};
   for (const c of criteria) {
     properties[c.key] = {
@@ -96,52 +55,6 @@ function buildGeminiSchema(criteria: CriterionDef[]) {
   };
 }
 
-async function scoreWithClaude(
-  role: Role,
-  cvText: string,
-  criteria: CriterionDef[],
-  apiKey: string
-): Promise<RawScores> {
-  const anthropic = new Anthropic({ apiKey });
-  const tool = buildAnthropicTool(criteria);
-
-  const message = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL,
-    max_tokens: 2000,
-    tools: [tool],
-    tool_choice: { type: "tool", name: "submit_scores" },
-    messages: [{ role: "user", content: buildPrompt(role, cvText, criteria) }],
-  });
-
-  const toolUse = message.content.find((block): block is Anthropic.ToolUseBlock => block.type === "tool_use");
-  if (!toolUse) throw new Error("Model did not return structured scores. Try again.");
-
-  return toolUse.input as RawScores;
-}
-
-async function scoreWithGemini(
-  role: Role,
-  cvText: string,
-  criteria: CriterionDef[],
-  apiKey: string
-): Promise<RawScores> {
-  const ai = new GoogleGenAI({ apiKey });
-
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: buildPrompt(role, cvText, criteria),
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: buildGeminiSchema(criteria),
-    },
-  });
-
-  const text = response.text;
-  if (!text) throw new Error("Model did not return structured scores. Try again.");
-
-  return JSON.parse(text) as RawScores;
-}
-
 function clampScore(n: unknown): number {
   const num = typeof n === "number" ? n : Number(n);
   if (Number.isNaN(num)) return 0;
@@ -154,24 +67,15 @@ export interface ScoredCriteria {
 }
 
 /**
- * Scores redacted CV text against one role's rubric criteria. Never pass
- * un-redacted CV text here — this text goes straight to an LLM.
+ * Scores redacted CV text against one role's rubric criteria via Gemini
+ * Flash. Never pass un-redacted CV text here.
  */
 export async function scoreAgainstRubric(
   role: Role,
   redactedCvText: string,
   criteria: CriterionDef[]
 ): Promise<ScoredCriteria> {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY;
-
-  if (!anthropicKey && !geminiKey) {
-    throw new Error("No LLM API key is configured on the server (ANTHROPIC_API_KEY or GEMINI_API_KEY).");
-  }
-
-  const raw = anthropicKey
-    ? await scoreWithClaude(role, redactedCvText, criteria, anthropicKey)
-    : await scoreWithGemini(role, redactedCvText, criteria, geminiKey as string);
+  const raw = await generateJson<RawScores>(buildPrompt(role, redactedCvText, criteria), buildSchema(criteria));
 
   const results: CriterionResult[] = criteria.map((def) => {
     const r = raw[def.key];

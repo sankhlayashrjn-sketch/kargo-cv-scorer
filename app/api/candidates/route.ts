@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "cvText is required" }, { status: 400 });
     }
 
-    const { name, email, phone, redactedText } = extractPii(cvText);
+    const { name, email, phone, redactedText } = await extractPii(cvText);
 
     const rows = await sql`
       INSERT INTO candidates (role_applied, cv_redacted)

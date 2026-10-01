@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
     "@google/genai": "^2.24.0",
     "@neon/config": "^1.8.2",
     "@neon/env": "^1.4.7",

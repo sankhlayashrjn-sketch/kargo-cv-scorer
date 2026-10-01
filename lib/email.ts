@@ -25,20 +25,11 @@ CV TEXT:
 ${redactedCvText}
 """`;
 
-  const result = await generateJson<{ summary: string }>(
-    prompt,
-    "submit_brief",
-    {
-      type: "object",
-      properties: { summary: { type: "string", description: "Exactly three sentences." } },
-      required: ["summary"],
-    },
-    {
-      type: GeminiType.OBJECT,
-      properties: { summary: { type: GeminiType.STRING, description: "Exactly three sentences." } },
-      required: ["summary"],
-    }
-  );
+  const result = await generateJson<{ summary: string }>(prompt, {
+    type: GeminiType.OBJECT,
+    properties: { summary: { type: GeminiType.STRING, description: "Exactly three sentences." } },
+    required: ["summary"],
+  });
 
   return result.summary.trim();
 }
@@ -75,27 +66,18 @@ CV TEXT (redacted):
 ${redactedCvText}
 """`;
 
-  const result = await generateJson<EmailDraft>(
-    prompt,
-    "submit_email_draft",
-    {
-      type: "object",
-      properties: {
-        subject: { type: "string", description: "Email subject line." },
-        body: {
-          type: "string",
-          description:
-            "Full email body. Must contain the literal token {{NAME}} at least once as the greeting placeholder.",
-        },
+  const result = await generateJson<EmailDraft>(prompt, {
+    type: GeminiType.OBJECT,
+    properties: {
+      subject: { type: GeminiType.STRING, description: "Email subject line." },
+      body: {
+        type: GeminiType.STRING,
+        description:
+          "Full email body. Must contain the literal token {{NAME}} at least once as the greeting placeholder.",
       },
-      required: ["subject", "body"],
     },
-    {
-      type: GeminiType.OBJECT,
-      properties: { subject: { type: GeminiType.STRING }, body: { type: GeminiType.STRING } },
-      required: ["subject", "body"],
-    }
-  );
+    required: ["subject", "body"],
+  });
 
   if (!result.body.includes("{{NAME}}")) {
     result.body = `Hi {{NAME}},\n\n${result.body}`;

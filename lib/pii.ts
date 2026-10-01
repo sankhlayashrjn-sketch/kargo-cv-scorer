@@ -1,3 +1,5 @@
+import { GeminiType, generateJson } from "@/lib/generate";
+
 export interface ExtractedPii {
   name: string;
   email: string | null;
@@ -5,53 +7,53 @@ export interface ExtractedPii {
   redactedText: string;
 }
 
-const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-// Matches common phone formats: +1 555-123-4567, (555) 123-4567, 555.123.4567, etc.
-const PHONE_RE = /(?:\+\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
-
-function escapeRegExp(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function guessName(lines: string[]): string {
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    if (EMAIL_RE.test(trimmed) || PHONE_RE.test(trimmed)) {
-      EMAIL_RE.lastIndex = 0;
-      PHONE_RE.lastIndex = 0;
-      continue;
-    }
-    // A name line is short, has no digits, and isn't a section header like "RESUME" or "CURRICULUM VITAE"
-    if (trimmed.length <= 60 && !/\d/.test(trimmed) && !/^(resume|curriculum vitae|cv)$/i.test(trimmed)) {
-      return trimmed;
-    }
-  }
-  return "Unnamed candidate";
-}
+const SCHEMA = {
+  type: GeminiType.OBJECT,
+  properties: {
+    name: { type: GeminiType.STRING, description: "The candidate's full name as it appears on the CV." },
+    email: {
+      type: GeminiType.STRING,
+      nullable: true,
+      description: "The candidate's email address, or null if none is present.",
+    },
+    phone: {
+      type: GeminiType.STRING,
+      nullable: true,
+      description: "The candidate's phone number, or null if none is present.",
+    },
+    redactedCvText: {
+      type: GeminiType.STRING,
+      description:
+        "The full CV text with the candidate's name, email, and phone number removed wherever they appear (replace each with [REDACTED]). Keep every other word — work experience, skills, education, dates, companies — exactly as written. Do not summarize or shorten.",
+    },
+  },
+  required: ["name", "email", "phone", "redactedCvText"],
+};
 
 /**
- * Deterministically extracts name/email/phone from CV text (no AI call, since
- * this data must never reach an LLM) and returns the CV with those exact
- * occurrences replaced by placeholder tokens.
+ * Extraction is the one AI call that must see the raw CV. Its only job is to
+ * split out name/email/phone so that every subsequent AI step (scoring,
+ * brief, email drafting) only ever sees the redacted text.
  */
-export function extractPii(cvText: string): ExtractedPii {
-  const lines = cvText.split("\n");
-  const name = guessName(lines);
+export async function extractPii(cvText: string): Promise<ExtractedPii> {
+  const prompt = `Extract the candidate's personal details from this CV, and produce a redacted version with those details removed.
 
-  const emailMatch = cvText.match(EMAIL_RE);
-  const email = emailMatch ? emailMatch[0] : null;
+CV TEXT:
+"""
+${cvText}
+"""`;
 
-  const phoneMatch = cvText.match(PHONE_RE);
-  const phone = phoneMatch ? phoneMatch[0] : null;
+  const result = await generateJson<{
+    name: string;
+    email: string | null;
+    phone: string | null;
+    redactedCvText: string;
+  }>(prompt, SCHEMA);
 
-  let redacted = cvText;
-  if (email) redacted = redacted.split(email).join("[EMAIL]");
-  if (phone) redacted = redacted.split(phone).join("[PHONE]");
-  if (name && name !== "Unnamed candidate") {
-    const nameRe = new RegExp(escapeRegExp(name), "g");
-    redacted = redacted.replace(nameRe, "[CANDIDATE]");
-  }
-
-  return { name, email, phone, redactedText: redacted };
+  return {
+    name: result.name?.trim() || "Unnamed candidate",
+    email: result.email?.trim() || null,
+    phone: result.phone?.trim() || null,
+    redactedText: result.redactedCvText?.trim() || cvText,
+  };
 }

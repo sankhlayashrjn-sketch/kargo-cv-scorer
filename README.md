@@ -2,24 +2,30 @@
 
 A pipeline that takes an uploaded CV and turns it into a ranked, reviewable
 hiring decision for one founder to act on. This is a recommendation and
-drafting tool — nothing is ever auto-sent; a human clicks Send.
+drafting tool — nothing is ever auto-sent; a human clicks Confirm.
 
 ## What it does
 
 1. The founder uploads a CV (`.txt` or `.pdf`) and picks the role applied for.
-2. The server deterministically extracts name/email/phone (regex, no AI call)
-   and strips them from the CV text before anything goes to an LLM.
+2. Gemini Flash extracts name/email/phone with structured output and returns
+   a redacted version of the CV with those fields stripped out. This is the
+   only AI call that ever sees the raw CV.
 3. The redacted CV is scored against **both** the PM and Senior PM rubric
-   (regardless of which role was applied for), via Claude (or Gemini as a
-   fallback) with a forced structured response: a 0–100 score, a supporting
-   quote, and a rationale per criterion.
+   (regardless of which role was applied for), via Gemini Flash with a forced
+   structured response: a 0–100 score, a supporting quote, and a rationale
+   per criterion.
 4. The candidate's score against the rubric for the role they applied for is
    compared to a configurable threshold. At or above it → a three-sentence
    interview brief plus a drafted interview-invite email. Below it → a
    drafted rejection email. Either way, the real name is substituted back
-   into the draft after generation — the LLM never sees it.
+   into the draft after generation — the LLM never sees it, only a
+   `{{NAME}}` placeholder.
 5. The founder reviews every candidate's breakdown, brief, and draft email on
-   the dashboard, and sends via Resend one candidate at a time.
+   the dashboard, and clicks Confirm to send via Resend, one candidate at a
+   time.
+
+Every AI step (extraction, scoring, brief, email drafting) runs on Gemini
+Flash — see `lib/generate.ts`.
 
 ## Setup
 
@@ -33,16 +39,15 @@ drafting tool — nothing is ever auto-sent; a human clicks Send.
    `.env.local.example`):
 
    ```
-   ANTHROPIC_API_KEY=sk-ant-...
    GEMINI_API_KEY=...
    DATABASE_URL=...          # Neon Postgres, already linked via `neon link`
    RESEND_API_KEY=...
    RESEND_FROM_EMAIL=you@yourverifieddomain.com
    ```
 
-   Scoring/brief/email generation use Claude if `ANTHROPIC_API_KEY` is set,
-   otherwise fall back to Gemini. `RESEND_FROM_EMAIL` must be a sender address
-   on a domain verified in your Resend account.
+   `RESEND_FROM_EMAIL` must be a sender address on a domain verified in your
+   Resend account — `onboarding@resend.dev` works with no setup but Resend
+   restricts it to only deliver to your own account's email.
 
 3. Run the dev server:
 
@@ -71,22 +76,24 @@ drafting tool — nothing is ever auto-sent; a human clicks Send.
 
 ## Key files
 
-- `lib/pii.ts` — deterministic name/email/phone extraction and redaction.
-- `lib/scoring.ts` — Claude/Gemini scoring against a given rubric's criteria.
-- `lib/email.ts` — brief and invite/rejection email drafting.
+- `lib/generate.ts` — the single Gemini Flash structured-JSON call every AI
+  step runs through.
+- `lib/pii.ts` — name/email/phone extraction + CV redaction (Gemini Flash).
+- `lib/scoring.ts` — scoring against a given rubric's criteria (Gemini Flash).
+- `lib/email.ts` — brief and invite/rejection email drafting (Gemini Flash).
 - `lib/pipeline.ts` — orchestrates the above for one candidate and persists
   everything.
 - `app/api/candidates/route.ts` — create a candidate (runs the full pipeline)
   and list all candidates.
 - `app/api/candidates/[id]/send/route.ts` — sends the stored draft via Resend;
-  only ever triggered by an explicit click.
+  only ever triggered by an explicit Confirm click.
 - `app/api/extract-pdf/route.ts` — PDF → text, via `unpdf`.
 
 ## Notes
 
 - Scoring is strict: if a CV doesn't address a criterion, it scores low, not a
   middling default.
-- To change models, set `ANTHROPIC_MODEL` (defaults to `claude-sonnet-5`) or
-  `GEMINI_MODEL` (defaults to `gemini-3.8-flash`) in `.env.local`.
+- To change the model, set `GEMINI_MODEL` (defaults to `gemini-3.8-flash`) in
+  `.env.local`.
 - The original `Claude outputs/rubric.txt` is kept as the human-readable
   reference; the live rubric used for scoring is the `rubric_criteria` table.

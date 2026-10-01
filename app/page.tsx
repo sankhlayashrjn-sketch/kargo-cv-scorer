@@ -220,7 +220,7 @@ export default function Home() {
         <h1 className="text-2xl font-semibold tracking-tight text-white">Kargo Hiring Dashboard</h1>
         <p className="mt-1 text-sm text-gray-400">
           Every CV is scored against both the PM and Senior PM rubric, and gets a drafted interview invite or
-          rejection email. Nothing is sent until you click Send.
+          rejection email. Nothing is sent until you click Confirm.
         </p>
       </header>
 
@@ -491,7 +491,7 @@ function CandidateRow({
                           disabled={sending}
                           className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-blue-800"
                         >
-                          {sending ? "Sending…" : "Send"}
+                          {sending ? "Sending…" : "Confirm"}
                         </button>
                       )}
                     </div>
