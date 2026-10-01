@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { sql } from "@/lib/db";
 import { extractPii } from "@/lib/pii";
 import { runPipeline } from "@/lib/pipeline";
@@ -31,7 +31,12 @@ export async function POST(req: NextRequest) {
       VALUES (${candidateId}, ${name}, ${email}, ${phone})
     `;
 
-    await runPipeline(candidateId);
+    // Scoring against both rubrics plus brief/email generation can take
+    // longer than a single HTTP request should block on. Respond as soon as
+    // the candidate exists (status 'processing'), and keep the function
+    // alive in the background to finish the pipeline — the dashboard polls
+    // for the status to flip to 'ready'/'error'.
+    after(() => runPipeline(candidateId));
 
     const result = await sql`
       SELECT c.id, c.role_applied, c.status, c.error_message,

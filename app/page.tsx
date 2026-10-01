@@ -48,6 +48,15 @@ interface CandidateDetail {
   email: { kind: "invite" | "rejection"; subject: string; body: string; status: "draft" | "sent"; sent_at: string | null } | null;
 }
 
+async function safeJson(res: Response): Promise<any> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text ? text.slice(0, 300) : `Request failed with status ${res.status}` };
+  }
+}
+
 function scoreColor(score: number) {
   if (score >= 70) return "text-emerald-400";
   if (score >= 40) return "text-amber-400";
@@ -73,20 +82,20 @@ export default function Home() {
   const [thresholds, setThresholds] = useState({ invite_threshold_pm: "70", invite_threshold_senior_pm: "70" });
   const [savingThresholds, setSavingThresholds] = useState(false);
 
-  async function loadCandidates() {
-    setLoadingList(true);
+  async function loadCandidates(opts?: { silent?: boolean }) {
+    if (!opts?.silent) setLoadingList(true);
     try {
       const res = await fetch("/api/candidates");
-      const data = await res.json();
+      const data = await safeJson(res);
       if (res.ok) setCandidates(data);
     } finally {
-      setLoadingList(false);
+      if (!opts?.silent) setLoadingList(false);
     }
   }
 
   async function loadSettings() {
     const res = await fetch("/api/settings");
-    const data = await res.json();
+    const data = await safeJson(res);
     if (res.ok) {
       setThresholds({
         invite_threshold_pm: data.invite_threshold_pm ?? "70",
@@ -100,6 +109,18 @@ export default function Home() {
     void loadSettings();
   }, []);
 
+  // While any candidate is still being scored in the background (see
+  // app/api/candidates/route.ts's use of `after()`), poll quietly until it's
+  // done instead of leaving the row stuck on "Scoring…".
+  useEffect(() => {
+    const hasProcessing = candidates.some((c) => c.status === "processing");
+    if (!hasProcessing) return;
+    const interval = setInterval(() => {
+      void loadCandidates({ silent: true });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [candidates]);
+
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -112,7 +133,7 @@ export default function Home() {
         const formData = new FormData();
         formData.append("file", file);
         const res = await fetch("/api/extract-pdf", { method: "POST", body: formData });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (!res.ok) {
           setSubmitError(data.error || "Could not read that PDF.");
           return;
@@ -145,7 +166,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role, cvText: trimmed }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) {
         setSubmitError(data.error || "Could not process this candidate.");
         return;
@@ -169,7 +190,7 @@ export default function Home() {
       setDetailLoading(id);
       try {
         const res = await fetch(`/api/candidates/${id}`);
-        const data = await res.json();
+        const data = await safeJson(res);
         if (res.ok) setDetailCache((prev) => ({ ...prev, [id]: data }));
       } finally {
         setDetailLoading(null);
@@ -182,7 +203,7 @@ export default function Home() {
     setSendError((prev) => ({ ...prev, [id]: "" }));
     try {
       const res = await fetch(`/api/candidates/${id}/send`, { method: "POST" });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) {
         setSendError((prev) => ({ ...prev, [id]: data.error || "Could not send email." }));
         return;
