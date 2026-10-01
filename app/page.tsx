@@ -63,6 +63,12 @@ function scoreColor(score: number) {
   return "text-rose-400";
 }
 
+const STUCK_AFTER_MS = 3 * 60 * 1000;
+
+function isStuck(item: { status: string; created_at: string }) {
+  return item.status === "processing" && Date.now() - new Date(item.created_at).getTime() > STUCK_AFTER_MS;
+}
+
 export default function Home() {
   const [role, setRole] = useState<Role>("pm");
   const [cvText, setCvText] = useState("");
@@ -78,6 +84,8 @@ export default function Home() {
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendError, setSendError] = useState<Record<string, string>>({});
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<Record<string, string>>({});
 
   const [thresholds, setThresholds] = useState({ invite_threshold_pm: "70", invite_threshold_senior_pm: "70" });
   const [savingThresholds, setSavingThresholds] = useState(false);
@@ -218,6 +226,28 @@ export default function Home() {
       setSendError((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : "Network error" }));
     } finally {
       setSendingId(null);
+    }
+  }
+
+  async function handleRetry(id: string) {
+    setRetryingId(id);
+    setRetryError((prev) => ({ ...prev, [id]: "" }));
+    try {
+      const res = await fetch(`/api/candidates/${id}/retry`, { method: "POST" });
+      const data = await safeJson(res);
+      if (!res.ok) {
+        setRetryError((prev) => ({ ...prev, [id]: data.error || "Could not retry this candidate." }));
+        return;
+      }
+      setDetailCache((prev) => {
+        const { [id]: _removed, ...rest } = prev;
+        return rest;
+      });
+      await loadCandidates();
+    } catch (err) {
+      setRetryError((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : "Network error" }));
+    } finally {
+      setRetryingId(null);
     }
   }
 
@@ -378,8 +408,11 @@ export default function Home() {
                     detailLoading={detailLoading === c.id}
                     sending={sendingId === c.id}
                     sendError={sendError[c.id]}
+                    retrying={retryingId === c.id}
+                    retryError={retryError[c.id]}
                     onToggle={() => toggleExpand(c.id)}
                     onSend={() => handleSend(c.id)}
+                    onRetry={() => handleRetry(c.id)}
                   />
                 ))}
               </tbody>
@@ -399,8 +432,11 @@ function CandidateRow({
   detailLoading,
   sending,
   sendError,
+  retrying,
+  retryError,
   onToggle,
   onSend,
+  onRetry,
 }: {
   rank: number;
   item: CandidateListItem;
@@ -409,9 +445,13 @@ function CandidateRow({
   detailLoading: boolean;
   sending: boolean;
   sendError?: string;
+  retrying: boolean;
+  retryError?: string;
   onToggle: () => void;
   onSend: () => void;
+  onRetry: () => void;
 }) {
+  const stuck = isStuck(item);
   return (
     <>
       <tr className="border-t border-border">
@@ -433,7 +473,9 @@ function CandidateRow({
           )}
         </td>
         <td className="px-4 py-3">
-          {item.status === "processing" ? (
+          {item.status === "processing" && stuck ? (
+            <span className="text-rose-400">Stuck</span>
+          ) : item.status === "processing" ? (
             <span className="inline-flex items-center gap-2 text-stone-400">
               <span className="h-2 w-2 animate-pulse rounded-full bg-accent-500" />
               Scoring…
@@ -465,12 +507,36 @@ function CandidateRow({
               {expanded ? "Hide" : "View"}
             </button>
           )}
+          {(item.status === "error" || stuck) && (
+            <button
+              onClick={onRetry}
+              disabled={retrying}
+              className="text-xs font-medium text-accent-400 hover:text-accent-300 disabled:cursor-not-allowed disabled:text-stone-500"
+            >
+              {retrying ? "Retrying…" : "Retry"}
+            </button>
+          )}
         </td>
       </tr>
       {item.status === "error" && (
         <tr className="border-t border-border bg-rose-950/20">
           <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
             {item.error_message}
+          </td>
+        </tr>
+      )}
+      {stuck && (
+        <tr className="border-t border-border bg-rose-950/20">
+          <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
+            This candidate has been processing for over 3 minutes and likely failed silently (e.g. a function
+            timeout). Retry re-runs scoring from the stored CV — no need to re-upload.
+          </td>
+        </tr>
+      )}
+      {retryError && (
+        <tr className="border-t border-border bg-rose-950/20">
+          <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
+            {retryError}
           </td>
         </tr>
       )}
