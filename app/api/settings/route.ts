@@ -8,6 +8,9 @@ export async function GET() {
     const rows = await sql`SELECT key, value FROM settings`;
     const settings: Record<string, string> = {};
     for (const r of rows) settings[r.key as string] = r.value as string;
+    if (process.env.RESEND_DEMO_OVERRIDE_EMAIL) {
+      settings.resend_demo_override_email = process.env.RESEND_DEMO_OVERRIDE_EMAIL;
+    }
     return NextResponse.json(settings);
   } catch (err) {
     console.error(err);

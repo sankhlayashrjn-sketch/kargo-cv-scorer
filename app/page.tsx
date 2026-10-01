@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   App,
   Button,
   Drawer,
@@ -137,6 +138,8 @@ export default function Home() {
   const [thresholds, setThresholds] = useState({ invite_threshold_pm: 70, invite_threshold_senior_pm: 70 });
   const [savingThresholds, setSavingThresholds] = useState(false);
 
+  const [demoOverrideEmail, setDemoOverrideEmail] = useState<string | null>(null);
+
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [detailCache, setDetailCache] = useState<Record<string, CandidateDetail>>({});
   const [detailLoading, setDetailLoading] = useState(false);
@@ -164,6 +167,7 @@ export default function Home() {
         invite_threshold_pm: Number(data.invite_threshold_pm ?? 70),
         invite_threshold_senior_pm: Number(data.invite_threshold_senior_pm ?? 70),
       });
+      setDemoOverrideEmail(data.resend_demo_override_email || null);
     }
   }
 
@@ -265,7 +269,11 @@ export default function Home() {
         message.error(data.error || "Could not send email.");
         return;
       }
-      message.success("Email sent.");
+      if (data.demoOverride) {
+        message.success(`Email sent to ${data.recipient} (demo mode — real candidate email is ${data.actualEmail}).`, 6);
+      } else {
+        message.success("Email sent.");
+      }
       setDetailCache((prev) => {
         const existing = prev[id];
         if (!existing || !existing.email) return prev;
@@ -575,7 +583,12 @@ export default function Home() {
             <Spin />
           </div>
         ) : (
-          <CandidateDetailView detail={drawerDetail} sending={sending} onConfirmSend={() => drawerId && handleConfirmSend(drawerId)} />
+          <CandidateDetailView
+            detail={drawerDetail}
+            sending={sending}
+            demoOverrideEmail={demoOverrideEmail}
+            onConfirmSend={() => drawerId && handleConfirmSend(drawerId)}
+          />
         )}
       </Drawer>
     </main>
@@ -585,16 +598,26 @@ export default function Home() {
 function CandidateDetailView({
   detail,
   sending,
+  demoOverrideEmail,
   onConfirmSend,
 }: {
   detail: CandidateDetail;
   sending: boolean;
+  demoOverrideEmail: string | null;
   onConfirmSend: () => void;
 }) {
   const nameOrThere = detail.candidate.name || "there";
 
   const decisionPane = (
     <div className="space-y-4">
+      {demoOverrideEmail && detail.email?.status !== "sent" && (
+        <Alert
+          type="warning"
+          showIcon
+          message="Demo mode is on"
+          description={`Confirm will send to ${demoOverrideEmail} instead of ${detail.candidate.email || "the candidate's email"}. Remove RESEND_DEMO_OVERRIDE_EMAIL once a domain is verified in Resend.`}
+        />
+      )}
       {detail.brief && (
         <div>
           <Text strong>Interview brief</Text>

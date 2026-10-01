@@ -40,12 +40,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const finalBody = (body as string).split("{{NAME}}").join(name || "there");
     const finalSubject = (subject as string).split("{{NAME}}").join(name || "there");
 
+    // DEMO MODE: while RESEND_FROM_EMAIL is still an unverified sandbox sender
+    // (onboarding@resend.dev), Resend can only deliver to the account's own
+    // email, and never to reserved domains like @example.com no matter what.
+    // RESEND_DEMO_OVERRIDE_EMAIL redirects every send to one real inbox so
+    // demos work regardless of what's in candidate_pii.email. Remove this env
+    // var once a real domain is verified in Resend.
+    const demoOverride = process.env.RESEND_DEMO_OVERRIDE_EMAIL;
+    const recipient = demoOverride || email;
+
     const resend = new Resend(apiKey);
     const { error } = await resend.emails.send({
       from: fromAddress,
-      to: email,
-      subject: finalSubject,
-      text: finalBody,
+      to: recipient,
+      subject: demoOverride ? `[Demo — actual recipient: ${email}] ${finalSubject}` : finalSubject,
+      text: demoOverride
+        ? `(Demo mode: this would normally be sent to ${email}, redirected here for testing.)\n\n${finalBody}`
+        : finalBody,
     });
 
     if (error) {
@@ -54,7 +65,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     await sql`UPDATE candidate_emails SET status = 'sent', sent_at = now() WHERE candidate_id = ${id}`;
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, demoOverride: !!demoOverride, recipient, actualEmail: email });
   } catch (err) {
     console.error(err);
     const msg = err instanceof Error ? err.message : "Unknown error";
