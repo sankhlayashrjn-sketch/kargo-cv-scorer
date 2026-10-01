@@ -44,3 +44,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: `Could not load candidate: ${msg}` }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  try {
+    const rows = await sql`DELETE FROM candidates WHERE id = ${id} RETURNING id`;
+    if (!rows.length) {
+      return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: `Could not remove candidate: ${msg}` }, { status: 500 });
+  }
+}

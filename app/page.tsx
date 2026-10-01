@@ -86,6 +86,9 @@ export default function Home() {
   const [sendError, setSendError] = useState<Record<string, string>>({});
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<Record<string, string>>({});
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<Record<string, string>>({});
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
   const [thresholds, setThresholds] = useState({ invite_threshold_pm: "70", invite_threshold_senior_pm: "70" });
   const [savingThresholds, setSavingThresholds] = useState(false);
@@ -226,6 +229,30 @@ export default function Home() {
       setSendError((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : "Network error" }));
     } finally {
       setSendingId(null);
+    }
+  }
+
+  async function handleRemove(id: string) {
+    setConfirmRemoveId(null);
+    setRemovingId(id);
+    setRemoveError((prev) => ({ ...prev, [id]: "" }));
+    try {
+      const res = await fetch(`/api/candidates/${id}`, { method: "DELETE" });
+      const data = await safeJson(res);
+      if (!res.ok) {
+        setRemoveError((prev) => ({ ...prev, [id]: data.error || "Could not remove this candidate." }));
+        return;
+      }
+      if (expandedId === id) setExpandedId(null);
+      setDetailCache((prev) => {
+        const { [id]: _removed, ...rest } = prev;
+        return rest;
+      });
+      await loadCandidates();
+    } catch (err) {
+      setRemoveError((prev) => ({ ...prev, [id]: err instanceof Error ? err.message : "Network error" }));
+    } finally {
+      setRemovingId(null);
     }
   }
 
@@ -410,9 +437,15 @@ export default function Home() {
                     sendError={sendError[c.id]}
                     retrying={retryingId === c.id}
                     retryError={retryError[c.id]}
+                    removing={removingId === c.id}
+                    removeError={removeError[c.id]}
+                    confirmingRemove={confirmRemoveId === c.id}
                     onToggle={() => toggleExpand(c.id)}
                     onSend={() => handleSend(c.id)}
                     onRetry={() => handleRetry(c.id)}
+                    onRequestRemove={() => setConfirmRemoveId(c.id)}
+                    onCancelRemove={() => setConfirmRemoveId(null)}
+                    onConfirmRemove={() => handleRemove(c.id)}
                   />
                 ))}
               </tbody>
@@ -434,9 +467,15 @@ function CandidateRow({
   sendError,
   retrying,
   retryError,
+  removing,
+  removeError,
+  confirmingRemove,
   onToggle,
   onSend,
   onRetry,
+  onRequestRemove,
+  onCancelRemove,
+  onConfirmRemove,
 }: {
   rank: number;
   item: CandidateListItem;
@@ -447,9 +486,15 @@ function CandidateRow({
   sendError?: string;
   retrying: boolean;
   retryError?: string;
+  removing: boolean;
+  removeError?: string;
+  confirmingRemove: boolean;
   onToggle: () => void;
   onSend: () => void;
   onRetry: () => void;
+  onRequestRemove: () => void;
+  onCancelRemove: () => void;
+  onConfirmRemove: () => void;
 }) {
   const stuck = isStuck(item);
   return (
@@ -502,26 +547,54 @@ function CandidateRow({
           )}
         </td>
         <td className="px-4 py-3 text-right">
-          {item.status === "ready" && (
-            <button onClick={onToggle} className="text-xs font-medium text-accent-400 hover:text-accent-300">
-              {expanded ? "Hide" : "View"}
-            </button>
-          )}
-          {(item.status === "error" || stuck) && (
-            <button
-              onClick={onRetry}
-              disabled={retrying}
-              className="text-xs font-medium text-accent-400 hover:text-accent-300 disabled:cursor-not-allowed disabled:text-stone-500"
-            >
-              {retrying ? "Retrying…" : "Retry"}
-            </button>
-          )}
+          <div className="flex justify-end gap-3">
+            {item.status === "ready" && (
+              <button onClick={onToggle} className="text-xs font-medium text-accent-400 hover:text-accent-300">
+                {expanded ? "Hide" : "View"}
+              </button>
+            )}
+            {(item.status === "error" || stuck) && (
+              <button
+                onClick={onRetry}
+                disabled={retrying}
+                className="text-xs font-medium text-accent-400 hover:text-accent-300 disabled:cursor-not-allowed disabled:text-stone-500"
+              >
+                {retrying ? "Retrying…" : "Retry"}
+              </button>
+            )}
+            {confirmingRemove ? (
+              <span className="inline-flex items-center gap-2 text-xs">
+                <span className="text-stone-400">Remove?</span>
+                <button
+                  onClick={onConfirmRemove}
+                  disabled={removing}
+                  className="font-medium text-rose-400 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-stone-500"
+                >
+                  {removing ? "Removing…" : "Yes"}
+                </button>
+                <button onClick={onCancelRemove} disabled={removing} className="font-medium text-stone-400 hover:text-stone-200">
+                  No
+                </button>
+              </span>
+            ) : (
+              <button onClick={onRequestRemove} className="text-xs font-medium text-stone-500 hover:text-rose-400">
+                Remove
+              </button>
+            )}
+          </div>
         </td>
       </tr>
       {item.status === "error" && (
         <tr className="border-t border-border bg-rose-950/20">
           <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
             {item.error_message}
+          </td>
+        </tr>
+      )}
+      {removeError && (
+        <tr className="border-t border-border bg-rose-950/20">
+          <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
+            {removeError}
           </td>
         </tr>
       )}
