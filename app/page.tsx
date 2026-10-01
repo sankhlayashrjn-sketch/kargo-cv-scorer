@@ -302,7 +302,7 @@ export default function Home() {
         </p>
       </header>
 
-      <section className="mb-10 rounded-xl border border-border bg-surface-raised p-5">
+      <section className="mb-10 rounded-xl border border-white/10 bg-surface-raised/40 p-5 shadow-xl shadow-black/20 backdrop-blur-xl">
         <h2 className="mb-4 text-base font-medium text-white">Add a candidate</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -312,7 +312,7 @@ export default function Home() {
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as Role)}
-              className="w-full max-w-xs rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
+              className="w-full max-w-xs rounded-md border border-white/10 bg-surface-overlay/60 px-3 py-2 backdrop-blur-sm text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
             >
               <option value="pm">Product Manager</option>
               <option value="senior_pm">Senior Product Manager</option>
@@ -343,7 +343,7 @@ export default function Home() {
               onChange={(e) => setCvText(e.target.value)}
               placeholder="Paste the candidate's CV as plain text..."
               rows={8}
-              className="w-full rounded-md border border-border bg-surface-overlay px-3 py-2 font-mono text-sm text-stone-100 placeholder:text-stone-500 focus:border-accent-500 focus:outline-none"
+              className="w-full rounded-md border border-white/10 bg-surface-overlay/60 px-3 py-2 backdrop-blur-sm font-mono text-sm text-stone-100 placeholder:text-stone-500 focus:border-accent-500 focus:outline-none"
             />
           </div>
 
@@ -359,7 +359,7 @@ export default function Home() {
         </form>
       </section>
 
-      <section className="mb-10 rounded-xl border border-border bg-surface-raised p-5">
+      <section className="mb-10 rounded-xl border border-white/10 bg-surface-raised/40 p-5 shadow-xl shadow-black/20 backdrop-blur-xl">
         <h2 className="mb-4 text-base font-medium text-white">Invite thresholds</h2>
         <div className="flex flex-wrap items-end gap-4">
           <div>
@@ -370,7 +370,7 @@ export default function Home() {
               type="number"
               value={thresholds.invite_threshold_pm}
               onChange={(e) => setThresholds((t) => ({ ...t, invite_threshold_pm: e.target.value }))}
-              className="w-28 rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
+              className="w-28 rounded-md border border-white/10 bg-surface-overlay/60 px-3 py-2 backdrop-blur-sm text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
             />
           </div>
           <div>
@@ -381,13 +381,13 @@ export default function Home() {
               type="number"
               value={thresholds.invite_threshold_senior_pm}
               onChange={(e) => setThresholds((t) => ({ ...t, invite_threshold_senior_pm: e.target.value }))}
-              className="w-28 rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
+              className="w-28 rounded-md border border-white/10 bg-surface-overlay/60 px-3 py-2 backdrop-blur-sm text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
             />
           </div>
           <button
             onClick={saveThresholds}
             disabled={savingThresholds}
-            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-stone-200 hover:bg-surface-overlay disabled:cursor-not-allowed disabled:text-stone-500"
+            className="rounded-md border border-white/10 px-4 py-2 text-sm font-medium text-stone-200 hover:bg-surface-overlay disabled:cursor-not-allowed disabled:text-stone-500"
           >
             {savingThresholds ? "Saving…" : "Save"}
           </button>
@@ -406,13 +406,13 @@ export default function Home() {
         {loadingList ? (
           <p className="text-sm text-stone-500">Loading…</p>
         ) : candidates.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-stone-500">
+          <p className="rounded-lg border border-dashed border-white/15 bg-white/5 px-4 py-8 backdrop-blur-sm text-center text-sm text-stone-500">
             No candidates yet.
           </p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-surface-raised/30 shadow-xl shadow-black/20 backdrop-blur-xl">
             <table className="w-full text-left text-sm">
-              <thead className="bg-surface-overlay text-xs uppercase tracking-wide text-stone-400">
+              <thead className="bg-surface-overlay/40 text-xs uppercase tracking-wide text-stone-400 backdrop-blur-sm">
                 <tr>
                   <th className="px-4 py-3 font-medium">Rank</th>
                   <th className="px-4 py-3 font-medium">Name</th>
@@ -499,7 +499,7 @@ function CandidateRow({
   const stuck = isStuck(item);
   return (
     <>
-      <tr className="border-t border-border">
+      <tr className="border-t border-white/10">
         <td className="px-4 py-3 text-stone-400">{rank}</td>
         <td className="px-4 py-3 font-medium text-stone-100">{item.name || "Unnamed candidate"}</td>
         <td className="px-4 py-3 text-stone-400">{ROLE_LABELS[item.role_applied]}</td>
@@ -585,21 +585,21 @@ function CandidateRow({
         </td>
       </tr>
       {item.status === "error" && (
-        <tr className="border-t border-border bg-rose-950/20">
+        <tr className="border-t border-white/10 bg-rose-950/20">
           <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
             {item.error_message}
           </td>
         </tr>
       )}
       {removeError && (
-        <tr className="border-t border-border bg-rose-950/20">
+        <tr className="border-t border-white/10 bg-rose-950/20">
           <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
             {removeError}
           </td>
         </tr>
       )}
       {stuck && (
-        <tr className="border-t border-border bg-rose-950/20">
+        <tr className="border-t border-white/10 bg-rose-950/20">
           <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
             This candidate has been processing for over 3 minutes and likely failed silently (e.g. a function
             timeout). Retry re-runs scoring from the stored CV — no need to re-upload.
@@ -607,15 +607,15 @@ function CandidateRow({
         </tr>
       )}
       {retryError && (
-        <tr className="border-t border-border bg-rose-950/20">
+        <tr className="border-t border-white/10 bg-rose-950/20">
           <td colSpan={8} className="px-4 py-3 text-sm text-rose-300">
             {retryError}
           </td>
         </tr>
       )}
       {expanded && (
-        <tr className="border-t border-border bg-surface-overlay/50">
-          <td colSpan={8} className="px-4 py-4">
+        <tr className="border-t border-white/10">
+          <td colSpan={8} className="bg-surface-overlay/20 px-4 py-4 backdrop-blur-md">
             {detailLoading || !detail ? (
               <p className="text-sm text-stone-500">Loading…</p>
             ) : (
@@ -629,14 +629,14 @@ function CandidateRow({
                 </div>
 
                 {detail.brief && (
-                  <div className="rounded-lg border border-border bg-surface-raised p-4">
+                  <div className="rounded-lg border border-white/10 bg-surface-raised/40 p-4 shadow-lg shadow-black/20 backdrop-blur-xl">
                     <h3 className="mb-2 font-medium text-stone-100">Interview brief</h3>
                     <p className="text-sm text-stone-300">{detail.brief.summary}</p>
                   </div>
                 )}
 
                 {detail.email && (
-                  <div className="rounded-lg border border-border bg-surface-raised p-4">
+                  <div className="rounded-lg border border-white/10 bg-surface-raised/40 p-4 shadow-lg shadow-black/20 backdrop-blur-xl">
                     <div className="mb-2 flex items-center justify-between">
                       <h3 className="font-medium text-stone-100">
                         Draft {detail.email.kind === "invite" ? "interview invite" : "rejection"} email
@@ -656,7 +656,7 @@ function CandidateRow({
                       )}
                     </div>
                     {sendError && <p className="mb-2 text-xs text-rose-400">{sendError}</p>}
-                    <div className="rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-stone-300">
+                    <div className="rounded-md border border-white/10 bg-surface-overlay/60 px-3 py-2 backdrop-blur-sm text-sm text-stone-300">
                       <p className="mb-2 font-medium text-stone-200">
                         {detail.email.subject.split("{{NAME}}").join(detail.candidate.name || "there")}
                       </p>
@@ -678,18 +678,18 @@ function CandidateRow({
 
 function RubricBreakdown({ title, rows }: { title: string; rows: ScoreRow[] }) {
   return (
-    <div className="rounded-lg border border-border bg-surface-raised p-4">
+    <div className="rounded-lg border border-white/10 bg-surface-raised/40 p-4 shadow-lg shadow-black/20 backdrop-blur-xl">
       <h3 className="mb-3 font-medium text-stone-100">{title}</h3>
       <div className="space-y-3">
         {rows.map((r) => (
-          <div key={r.criterion_key} className="border-t border-border pt-3 first:border-t-0 first:pt-0">
+          <div key={r.criterion_key} className="border-t border-white/10 pt-3 first:border-t-0 first:pt-0">
             <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
               <span className="text-sm font-medium text-stone-200">{r.label}</span>
               <span className="text-xs text-stone-400">
                 weight {r.weight}% · <span className={scoreColor(r.score)}>{r.score}/100</span> · {r.weighted_contribution} pts
               </span>
             </div>
-            <blockquote className="border-l-2 border-border pl-3 text-xs italic text-stone-400">
+            <blockquote className="border-l-2 border-white/10 pl-3 text-xs italic text-stone-400">
               &ldquo;{r.evidence}&rdquo;
             </blockquote>
           </div>
