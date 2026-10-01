@@ -218,7 +218,7 @@ export default function Home() {
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight text-white">Kargo Hiring Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-400">
+        <p className="mt-1 text-sm text-stone-400">
           Every CV is scored against both the PM and Senior PM rubric, and gets a drafted interview invite or
           rejection email. Nothing is sent until you click Confirm.
         </p>
@@ -228,13 +228,13 @@ export default function Home() {
         <h2 className="mb-4 text-base font-medium text-white">Add a candidate</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-400">
               Role applied for
             </label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as Role)}
-              className="w-full max-w-xs rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+              className="w-full max-w-xs rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
             >
               <option value="pm">Product Manager</option>
               <option value="senior_pm">Senior Product Manager</option>
@@ -243,12 +243,12 @@ export default function Home() {
 
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">CV text</label>
+              <label className="block text-xs font-medium uppercase tracking-wide text-stone-400">CV text</label>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="text-xs font-medium text-blue-400 hover:text-blue-300 disabled:cursor-not-allowed disabled:text-gray-500"
+                className="text-xs font-medium text-accent-400 hover:text-accent-300 disabled:cursor-not-allowed disabled:text-stone-500"
               >
                 {uploading ? "Reading PDF…" : "Upload .txt or .pdf file"}
               </button>
@@ -265,7 +265,7 @@ export default function Home() {
               onChange={(e) => setCvText(e.target.value)}
               placeholder="Paste the candidate's CV as plain text..."
               rows={8}
-              className="w-full rounded-md border border-border bg-surface-overlay px-3 py-2 font-mono text-sm text-gray-100 placeholder:text-gray-500 focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-md border border-border bg-surface-overlay px-3 py-2 font-mono text-sm text-stone-100 placeholder:text-stone-500 focus:border-accent-500 focus:outline-none"
             />
           </div>
 
@@ -274,7 +274,7 @@ export default function Home() {
           <button
             type="submit"
             disabled={submitting}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-blue-800"
+            className="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-accent-800"
           >
             {submitting ? "Scoring against both rubrics…" : "Add candidate"}
           </button>
@@ -285,36 +285,36 @@ export default function Home() {
         <h2 className="mb-4 text-base font-medium text-white">Invite thresholds</h2>
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-400">
               PM (score out of 100)
             </label>
             <input
               type="number"
               value={thresholds.invite_threshold_pm}
               onChange={(e) => setThresholds((t) => ({ ...t, invite_threshold_pm: e.target.value }))}
-              className="w-28 rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+              className="w-28 rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-400">
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-stone-400">
               Senior PM (score out of 100)
             </label>
             <input
               type="number"
               value={thresholds.invite_threshold_senior_pm}
               onChange={(e) => setThresholds((t) => ({ ...t, invite_threshold_senior_pm: e.target.value }))}
-              className="w-28 rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+              className="w-28 rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-stone-100 focus:border-accent-500 focus:outline-none"
             />
           </div>
           <button
             onClick={saveThresholds}
             disabled={savingThresholds}
-            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-gray-200 hover:bg-surface-overlay disabled:cursor-not-allowed disabled:text-gray-500"
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-stone-200 hover:bg-surface-overlay disabled:cursor-not-allowed disabled:text-stone-500"
           >
             {savingThresholds ? "Saving…" : "Save"}
           </button>
         </div>
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-stone-500">
           Applies to new candidates going forward. A candidate's total score (against the rubric for the role they
           applied for) at or above this number gets an interview invite draft; below it gets a rejection draft.
         </p>
@@ -322,19 +322,19 @@ export default function Home() {
 
       <section>
         <h2 className="mb-4 text-base font-medium text-white">
-          Candidates {candidates.length > 0 && <span className="text-gray-500">({candidates.length})</span>}
+          Candidates {candidates.length > 0 && <span className="text-stone-500">({candidates.length})</span>}
         </h2>
 
         {loadingList ? (
-          <p className="text-sm text-gray-500">Loading…</p>
+          <p className="text-sm text-stone-500">Loading…</p>
         ) : candidates.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-gray-500">
+          <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-stone-500">
             No candidates yet.
           </p>
         ) : (
           <div className="overflow-hidden rounded-xl border border-border">
             <table className="w-full text-left text-sm">
-              <thead className="bg-surface-overlay text-xs uppercase tracking-wide text-gray-400">
+              <thead className="bg-surface-overlay text-xs uppercase tracking-wide text-stone-400">
                 <tr>
                   <th className="px-4 py-3 font-medium">Rank</th>
                   <th className="px-4 py-3 font-medium">Name</th>
@@ -394,9 +394,9 @@ function CandidateRow({
   return (
     <>
       <tr className="border-t border-border">
-        <td className="px-4 py-3 text-gray-400">{rank}</td>
-        <td className="px-4 py-3 font-medium text-gray-100">{item.name || "Unnamed candidate"}</td>
-        <td className="px-4 py-3 text-gray-400">{ROLE_LABELS[item.role_applied]}</td>
+        <td className="px-4 py-3 text-stone-400">{rank}</td>
+        <td className="px-4 py-3 font-medium text-stone-100">{item.name || "Unnamed candidate"}</td>
+        <td className="px-4 py-3 text-stone-400">{ROLE_LABELS[item.role_applied]}</td>
         <td className="px-4 py-3">
           {item.total_score_pm != null ? (
             <span className={scoreColor(item.total_score_pm)}>{item.total_score_pm.toFixed(1)}</span>
@@ -413,8 +413,8 @@ function CandidateRow({
         </td>
         <td className="px-4 py-3">
           {item.status === "processing" ? (
-            <span className="inline-flex items-center gap-2 text-gray-400">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-blue-500" />
+            <span className="inline-flex items-center gap-2 text-stone-400">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-accent-500" />
               Scoring…
             </span>
           ) : item.status === "error" ? (
@@ -424,12 +424,12 @@ function CandidateRow({
               Invite
             </span>
           ) : item.email_kind === "rejection" ? (
-            <span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs font-medium text-gray-400">Reject</span>
+            <span className="rounded-full bg-stone-800 px-2 py-0.5 text-xs font-medium text-stone-400">Reject</span>
           ) : (
             "—"
           )}
         </td>
-        <td className="px-4 py-3 text-gray-400">
+        <td className="px-4 py-3 text-stone-400">
           {item.email_status === "sent" ? (
             <span className="text-emerald-400">Sent</span>
           ) : item.email_status === "draft" ? (
@@ -440,7 +440,7 @@ function CandidateRow({
         </td>
         <td className="px-4 py-3 text-right">
           {item.status === "ready" && (
-            <button onClick={onToggle} className="text-xs font-medium text-blue-400 hover:text-blue-300">
+            <button onClick={onToggle} className="text-xs font-medium text-accent-400 hover:text-accent-300">
               {expanded ? "Hide" : "View"}
             </button>
           )}
@@ -457,7 +457,7 @@ function CandidateRow({
         <tr className="border-t border-border bg-surface-overlay/50">
           <td colSpan={8} className="px-4 py-4">
             {detailLoading || !detail ? (
-              <p className="text-sm text-gray-500">Loading…</p>
+              <p className="text-sm text-stone-500">Loading…</p>
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -470,15 +470,15 @@ function CandidateRow({
 
                 {detail.brief && (
                   <div className="rounded-lg border border-border bg-surface-raised p-4">
-                    <h3 className="mb-2 font-medium text-gray-100">Interview brief</h3>
-                    <p className="text-sm text-gray-300">{detail.brief.summary}</p>
+                    <h3 className="mb-2 font-medium text-stone-100">Interview brief</h3>
+                    <p className="text-sm text-stone-300">{detail.brief.summary}</p>
                   </div>
                 )}
 
                 {detail.email && (
                   <div className="rounded-lg border border-border bg-surface-raised p-4">
                     <div className="mb-2 flex items-center justify-between">
-                      <h3 className="font-medium text-gray-100">
+                      <h3 className="font-medium text-stone-100">
                         Draft {detail.email.kind === "invite" ? "interview invite" : "rejection"} email
                       </h3>
                       {detail.email.status === "sent" ? (
@@ -489,22 +489,22 @@ function CandidateRow({
                         <button
                           onClick={onSend}
                           disabled={sending}
-                          className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-blue-800"
+                          className="rounded-md bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-500 disabled:cursor-not-allowed disabled:bg-accent-800"
                         >
                           {sending ? "Sending…" : "Confirm"}
                         </button>
                       )}
                     </div>
                     {sendError && <p className="mb-2 text-xs text-rose-400">{sendError}</p>}
-                    <div className="rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-gray-300">
-                      <p className="mb-2 font-medium text-gray-200">
+                    <div className="rounded-md border border-border bg-surface-overlay px-3 py-2 text-sm text-stone-300">
+                      <p className="mb-2 font-medium text-stone-200">
                         {detail.email.subject.split("{{NAME}}").join(detail.candidate.name || "there")}
                       </p>
                       <p className="whitespace-pre-wrap">
                         {detail.email.body.split("{{NAME}}").join(detail.candidate.name || "there")}
                       </p>
                     </div>
-                    <p className="mt-2 text-xs text-gray-500">To: {detail.candidate.email || "no email on file"}</p>
+                    <p className="mt-2 text-xs text-stone-500">To: {detail.candidate.email || "no email on file"}</p>
                   </div>
                 )}
               </div>
@@ -519,17 +519,17 @@ function CandidateRow({
 function RubricBreakdown({ title, rows }: { title: string; rows: ScoreRow[] }) {
   return (
     <div className="rounded-lg border border-border bg-surface-raised p-4">
-      <h3 className="mb-3 font-medium text-gray-100">{title}</h3>
+      <h3 className="mb-3 font-medium text-stone-100">{title}</h3>
       <div className="space-y-3">
         {rows.map((r) => (
           <div key={r.criterion_key} className="border-t border-border pt-3 first:border-t-0 first:pt-0">
             <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-              <span className="text-sm font-medium text-gray-200">{r.label}</span>
-              <span className="text-xs text-gray-400">
+              <span className="text-sm font-medium text-stone-200">{r.label}</span>
+              <span className="text-xs text-stone-400">
                 weight {r.weight}% · <span className={scoreColor(r.score)}>{r.score}/100</span> · {r.weighted_contribution} pts
               </span>
             </div>
-            <blockquote className="border-l-2 border-border pl-3 text-xs italic text-gray-400">
+            <blockquote className="border-l-2 border-border pl-3 text-xs italic text-stone-400">
               &ldquo;{r.evidence}&rdquo;
             </blockquote>
           </div>

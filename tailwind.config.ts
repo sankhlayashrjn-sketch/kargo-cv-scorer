@@ -7,12 +7,20 @@ const config: Config = {
     extend: {
       colors: {
         surface: {
-          DEFAULT: "#0b0d10",
-          raised: "#14171c",
-          overlay: "#1c2027",
+          DEFAULT: "#262624",
+          raised: "#2d2c2a",
+          overlay: "#37352f",
         },
         border: {
-          DEFAULT: "#2a2f38",
+          DEFAULT: "#46443e",
+        },
+        accent: {
+          300: "#e4a98d",
+          400: "#d88e68",
+          500: "#cc785c",
+          600: "#b5634a",
+          700: "#9c5340",
+          800: "#7a4132",
         },
       },
     },
