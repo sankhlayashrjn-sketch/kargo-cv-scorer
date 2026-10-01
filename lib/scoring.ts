@@ -1,17 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI, Type } from "@google/genai";
-import { RUBRIC, ROLE_LABELS, Role, CriterionResult, ScoreResult } from "@/lib/rubric";
-
-export const runtime = "nodejs";
+import { CriterionDef, CriterionResult, ROLE_LABELS, Role } from "@/lib/rubric";
 
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
 type RawScores = Record<string, { score: number; evidence: string; rationale: string }>;
 
-function buildPrompt(role: Role, cvText: string) {
-  const criteria = RUBRIC[role];
+function buildPrompt(role: Role, cvText: string, criteria: CriterionDef[]) {
   const roleLabel = ROLE_LABELS[role];
   const criteriaBlock = criteria
     .map((c, i) => `${i + 1}. ${c.label} (weight ${c.weight}%)\n   ${c.description}`)
@@ -20,6 +16,8 @@ function buildPrompt(role: Role, cvText: string) {
   return `You are scoring a candidate's CV against Kargo's fixed hiring rubric for the role of ${roleLabel}.
 
 Score the CV strictly against each of the following criteria, using ONLY textual evidence found in the CV below. Do not guess generously — if the CV is silent on a criterion, or the evidence is thin/generic, score it low. Reward specificity (named incidents, named artifacts, concrete scope of adoption) over vague claims or metrics with no supporting narrative.
+
+Note: the CV below has had the candidate's name, email, and phone number replaced with placeholder tokens like [CANDIDATE], [EMAIL], [PHONE] for privacy. Score on substance, not the placeholders.
 
 CRITERIA:
 
@@ -36,8 +34,7 @@ ${cvText}
 """`;
 }
 
-function buildAnthropicTool(role: Role) {
-  const criteria = RUBRIC[role];
+function buildAnthropicTool(criteria: CriterionDef[]) {
   const properties: Record<string, unknown> = {};
   for (const c of criteria) {
     properties[c.key] = {
@@ -75,8 +72,7 @@ function buildAnthropicTool(role: Role) {
   };
 }
 
-function buildGeminiSchema(role: Role) {
-  const criteria = RUBRIC[role];
+function buildGeminiSchema(criteria: CriterionDef[]) {
   const properties: Record<string, unknown> = {};
   for (const c of criteria) {
     properties[c.key] = {
@@ -100,16 +96,21 @@ function buildGeminiSchema(role: Role) {
   };
 }
 
-async function scoreWithClaude(role: Role, cvText: string, apiKey: string): Promise<RawScores> {
+async function scoreWithClaude(
+  role: Role,
+  cvText: string,
+  criteria: CriterionDef[],
+  apiKey: string
+): Promise<RawScores> {
   const anthropic = new Anthropic({ apiKey });
-  const tool = buildAnthropicTool(role);
+  const tool = buildAnthropicTool(criteria);
 
   const message = await anthropic.messages.create({
     model: ANTHROPIC_MODEL,
     max_tokens: 2000,
     tools: [tool],
     tool_choice: { type: "tool", name: "submit_scores" },
-    messages: [{ role: "user", content: buildPrompt(role, cvText) }],
+    messages: [{ role: "user", content: buildPrompt(role, cvText, criteria) }],
   });
 
   const toolUse = message.content.find((block): block is Anthropic.ToolUseBlock => block.type === "tool_use");
@@ -118,15 +119,20 @@ async function scoreWithClaude(role: Role, cvText: string, apiKey: string): Prom
   return toolUse.input as RawScores;
 }
 
-async function scoreWithGemini(role: Role, cvText: string, apiKey: string): Promise<RawScores> {
+async function scoreWithGemini(
+  role: Role,
+  cvText: string,
+  criteria: CriterionDef[],
+  apiKey: string
+): Promise<RawScores> {
   const ai = new GoogleGenAI({ apiKey });
 
   const response = await ai.models.generateContent({
     model: GEMINI_MODEL,
-    contents: buildPrompt(role, cvText),
+    contents: buildPrompt(role, cvText, criteria),
     config: {
       responseMimeType: "application/json",
-      responseSchema: buildGeminiSchema(role),
+      responseSchema: buildGeminiSchema(criteria),
     },
   });
 
@@ -136,72 +142,52 @@ async function scoreWithGemini(role: Role, cvText: string, apiKey: string): Prom
   return JSON.parse(text) as RawScores;
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const role: Role = body.role === "senior_pm" ? "senior_pm" : "pm";
-    const cvText: string = typeof body.cvText === "string" ? body.cvText.trim() : "";
-    const candidateName: string =
-      typeof body.candidateName === "string" && body.candidateName.trim()
-        ? body.candidateName.trim()
-        : deriveNameFromCv(cvText);
-
-    if (!cvText) {
-      return NextResponse.json({ error: "cvText is required" }, { status: 400 });
-    }
-
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    const geminiKey = process.env.GEMINI_API_KEY;
-
-    if (!anthropicKey && !geminiKey) {
-      return NextResponse.json(
-        {
-          error:
-            "No LLM API key is configured on the server. Add ANTHROPIC_API_KEY or GEMINI_API_KEY to .env.local and restart the dev server.",
-        },
-        { status: 500 }
-      );
-    }
-
-    const raw = anthropicKey
-      ? await scoreWithClaude(role, cvText, anthropicKey)
-      : await scoreWithGemini(role, cvText, geminiKey as string);
-
-    const criteriaDefs = RUBRIC[role];
-    const criteria: CriterionResult[] = criteriaDefs.map((def) => {
-      const r = raw[def.key];
-      const score = clampScore(r?.score);
-      return {
-        key: def.key,
-        label: def.label,
-        weight: def.weight,
-        score,
-        weightedContribution: Math.round(((score * def.weight) / 100) * 10) / 10,
-        evidence: r?.evidence?.trim() || "No matching evidence found in the CV.",
-        rationale: r?.rationale?.trim() || "",
-      };
-    });
-
-    const totalScore = Math.round(criteria.reduce((sum, c) => sum + c.weightedContribution, 0) * 10) / 10;
-
-    const result: ScoreResult = { role, criteria, totalScore };
-
-    return NextResponse.json({ candidateName, ...result });
-  } catch (err) {
-    console.error(err);
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: `Scoring failed: ${msg}` }, { status: 500 });
-  }
-}
-
 function clampScore(n: unknown): number {
   const num = typeof n === "number" ? n : Number(n);
   if (Number.isNaN(num)) return 0;
   return Math.max(0, Math.min(100, Math.round(num)));
 }
 
-function deriveNameFromCv(cvText: string): string {
-  const firstLine = cvText.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
-  if (!firstLine) return "Unnamed candidate";
-  return firstLine.length > 60 ? firstLine.slice(0, 60) + "…" : firstLine;
+export interface ScoredCriteria {
+  criteria: CriterionResult[];
+  totalScore: number;
+}
+
+/**
+ * Scores redacted CV text against one role's rubric criteria. Never pass
+ * un-redacted CV text here — this text goes straight to an LLM.
+ */
+export async function scoreAgainstRubric(
+  role: Role,
+  redactedCvText: string,
+  criteria: CriterionDef[]
+): Promise<ScoredCriteria> {
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+
+  if (!anthropicKey && !geminiKey) {
+    throw new Error("No LLM API key is configured on the server (ANTHROPIC_API_KEY or GEMINI_API_KEY).");
+  }
+
+  const raw = anthropicKey
+    ? await scoreWithClaude(role, redactedCvText, criteria, anthropicKey)
+    : await scoreWithGemini(role, redactedCvText, criteria, geminiKey as string);
+
+  const results: CriterionResult[] = criteria.map((def) => {
+    const r = raw[def.key];
+    const score = clampScore(r?.score);
+    return {
+      key: def.key,
+      label: def.label,
+      weight: def.weight,
+      score,
+      weightedContribution: Math.round(((score * def.weight) / 100) * 10) / 10,
+      evidence: r?.evidence?.trim() || "No matching evidence found in the CV.",
+      rationale: r?.rationale?.trim() || "",
+    };
+  });
+
+  const totalScore = Math.round(results.reduce((sum, c) => sum + c.weightedContribution, 0) * 10) / 10;
+
+  return { criteria: results, totalScore };
 }
